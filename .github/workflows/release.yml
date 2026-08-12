@@ -1,0 +1,68 @@
+name: Release
+
+# Cutting a release is: push a vX.Y.Z tag from its release/vX.x branch. This
+# turns that tag into a GitHub Release with auto-generated notes, which is
+# what update.sh and lib/update-check.sh read via /releases/latest.
+#
+# GitHub fires this on any vX.Y.Z tag push, regardless of branch — a tag push
+# and a branch push are separate ref events, so `on.push` can't require the
+# tag to belong to a particular branch on its own, and a workflow-side check
+# would need the full git history just to answer that. Instead the guarantee
+# is process, not CI: the /release skill (.claude/skills/release/SKILL.md) is
+# the only place tags get created, and it only ever tags release/vX.x after
+# merging main into it. Follow that skill and this trigger is safe as-is.
+#
+# A tag with a hyphen (v1.2.0-rc1) is published as a pre-release, so it's
+# skipped by /releases/latest and won't be offered to anyone running the
+# stable update flow.
+#
+# This is the primary distribution method: install.sh/README point people at
+# a downloaded tarball rather than a git clone, and update.sh downloads this
+# same asset to upgrade. GitHub's own "Source code" links (attached to every
+# release for free) are just the repo checkout at the tag, .github/ and
+# .claude/ included — fine for developers, wrong to hand to someone who just
+# wants to install the tool. So this builds an install-only tarball (hooks/,
+# lib/, the three shell entry points, VERSION, README) instead, and uploads it
+# under a fixed filename so update.sh and the README's install one-liner can
+# both find it without knowing the version number in advance:
+# .../releases/latest/download/claude-package-kit.tar.gz always resolves to
+# the newest one, and .../releases/download/vX.Y.Z/claude-package-kit.tar.gz
+# to a specific one.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build install tarball
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git archive --format=tar.gz \
+            --prefix="claude-package-kit/" \
+            -o "claude-package-kit.tar.gz" \
+            "$TAG" -- skill lib install.sh uninstall.sh update.sh VERSION README.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          prerelease_flag=()
+          case "$TAG" in
+            *-*) prerelease_flag=(--prerelease) ;;
+          esac
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            "${prerelease_flag[@]}" \
+            "claude-package-kit.tar.gz"

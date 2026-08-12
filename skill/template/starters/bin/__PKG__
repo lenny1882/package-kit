@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# __PKG__ — <one line>
+#
+# <Why it exists.>
+set -euo pipefail
+
+usage() {
+  cat <<USAGE
+__PKG__ — <one line>
+
+USAGE
+  __PKG__ <command> [options]
+
+COMMANDS
+  ...
+USAGE
+}
+
+case "${1:-}" in
+  -h|--help|"") usage; exit 0 ;;
+  *) printf 'unknown command: %s\n' "$1" >&2; exit 2 ;;
+esac
