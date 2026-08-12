@@ -69,11 +69,15 @@ for f in update.sh lib/update-check.sh .github/workflows/release.yml .claude/ski
 done
 grep -q 'GITHUB_SLUG="lenny1882/test-hook"' "$out/update.sh" \
   && ok "update.sh points at the right repo" || no "update.sh points at the right repo" "$(grep GITHUB_SLUG "$out/update.sh")"
-grep -q -- '-- hooks lib install.sh' "$out/.github/workflows/release.yml" \
+grep -q -- '-- hooks lib manifest.sh' "$out/.github/workflows/release.yml" \
   && ok "the tarball payload matches the kind" || no "the tarball payload matches the kind" "$(grep 'TAG" --' "$out/.github/workflows/release.yml")"
+# install.sh sources manifest.sh, so a tarball built without it cannot install
+# at all — and nothing in a git checkout ever shows that up.
+grep -q -- 'manifest.sh install.sh uninstall.sh update.sh VERSION README.md' "$out/.github/workflows/release.yml" \
+  && ok "the tarball carries what the installer reads" || no "the tarball carries what the installer reads" "$(grep 'TAG" --' "$out/.github/workflows/release.yml")"
 # The scaffolder's own release tarball once left lib/ out for skill packages,
 # so a tarball install had no update check while hook and command installs did.
-grep -q -- '-- skill lib install.sh' "$TMP/test-skill/.github/workflows/release.yml" \
+grep -q -- '-- skill lib manifest.sh' "$TMP/test-skill/.github/workflows/release.yml" \
   && ok "a skill's tarball carries lib/ too" || no "a skill's tarball carries lib/ too" "$(grep 'TAG" --' "$TMP/test-skill/.github/workflows/release.yml")"
 
 "$NEW" --name test-bare --kind hook --dir "$TMP" --no-release >/dev/null 2>&1
@@ -115,7 +119,7 @@ grep -q 'GITHUB_SLUG="lenny1882/package-kit"' "$REPO/update.sh" \
 # the repo. update.sh and the README one-liner both have to agree on which.
 grep -q 'TARBALL_NAME="claude-package-kit.tar.gz"' "$REPO/update.sh" \
   && ok "update.sh looks for the right tarball" || no "update.sh looks for the right tarball" "$(grep TARBALL_NAME "$REPO/update.sh")"
-grep -q -- '-- skill lib install.sh' "$REPO/.github/workflows/release.yml" \
+grep -q -- '-- skill lib manifest.sh' "$REPO/.github/workflows/release.yml" \
   && ok "its own tarball payload matches its kind" || no "its own tarball payload matches its kind" "$(grep 'TAG" --' "$REPO/.github/workflows/release.yml")"
 
 echo "the kit installs itself"
@@ -146,6 +150,22 @@ grep -q "dry run" "$TMP/o" && ok "--dry-run writes nothing" || no "--dry-run wri
 grep -q "someone-elses-thing" "$CLAUDE_DIR/settings.json" \
   && ok "and leaves other packages alone" || no "and leaves other packages alone" "removed them"
 
+
+echo "the release tarball is enough to install from"
+# The question a git checkout can never answer: is the payload list complete?
+# CI builds the tarball with git archive at the tag; this builds the same file
+# list out of the checkout and installs it, which is the part that matters.
+payload=$(sed -n 's/^ *"\$TAG" -- //p' "$REPO/.github/workflows/release.yml")
+[ -n "$payload" ] && ok "found the payload list in the workflow" || no "found the payload list in the workflow" "no git archive line"
+mkdir -p "$TMP/tarball/claude-package-kit"
+( cd "$REPO" && tar -cf - $payload ) | ( cd "$TMP/tarball/claude-package-kit" && tar -xf - )
+export CLAUDE_DIR="$TMP/tarball-claude"; mkdir -p "$CLAUDE_DIR"
+"$TMP/tarball/claude-package-kit/install.sh" --yes >"$TMP/o" 2>&1 \
+  && ok "a tarball install works" || no "a tarball install works" "$(tail -4 "$TMP/o")"
+grep -q "it does what it is supposed to" "$TMP/o" \
+  && ok "and the probe passes from a copy install" || no "and the probe passes from a copy install" "$(tail -4 "$TMP/o")"
+[ -f "$CLAUDE_DIR/skills/claude-package-kit/bin/new-package.sh" ] \
+  && ok "the scaffolder survives the round trip" || no "the scaffolder survives the round trip" "missing"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]

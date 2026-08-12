@@ -34,6 +34,10 @@ The tarball deliberately excludes `.github/` and `.claude/` — GitHub's own
 "Source code" links are the whole checkout, which is right for a developer and
 wrong for someone who just wants to install the tool. The payload list is the
 `git archive` line in the workflow; keep it current if the layout changes.
+`manifest.sh` is on that line for a reason that is easy to miss — `install.sh`
+sources it, so a tarball built without it stops on the first line that matters
+with `No such file or directory`, while the git checkout it was tested from
+installs perfectly.
 
 A tag with a hyphen — `v1.2.0-rc1` — publishes as a pre-release, so
 `/releases/latest` skips it and nobody on the stable update path is offered it.

@@ -50,7 +50,7 @@ jobs:
           git archive --format=tar.gz \
             --prefix="claude-package-kit/" \
             -o "claude-package-kit.tar.gz" \
-            "$TAG" -- skill lib install.sh uninstall.sh update.sh VERSION README.md
+            "$TAG" -- skill lib manifest.sh install.sh uninstall.sh update.sh VERSION README.md
 
       - name: Create GitHub Release
         env:

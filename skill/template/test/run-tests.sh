@@ -47,6 +47,22 @@ jq -e --arg o "__PKG__" '[.. | .command? // empty] | any(contains($o))' \
   "$CLAUDE_DIR/settings.json" >/dev/null 2>&1 \
   && no "uninstall removes our entries" "still registered" || ok "uninstall removes our entries"
 
+echo "release tarball"
+# Whether the release tarball is enough to install from — the one thing a git
+# checkout can never tell you, because everything is present either way. CI
+# builds it with git archive at the tag; this builds the same file list out of
+# the checkout and installs it.
+if [ -f "$REPO/.github/workflows/release.yml" ]; then
+  payload=$(sed -n 's/^ *"\$TAG" -- //p' "$REPO/.github/workflows/release.yml")
+  [ -n "$payload" ] && ok "found the payload list in the workflow" || no "found the payload list in the workflow" "no git archive line"
+  mkdir -p "$TMP/tarball/__PKG__"
+  ( cd "$REPO" && tar -cf - $payload ) | ( cd "$TMP/tarball/__PKG__" && tar -xf - )
+  CLAUDE_DIR="$TMP/tarball-claude" "$TMP/tarball/__PKG__/install.sh" --yes >"$TMP/out" 2>&1 \
+    && ok "a tarball install works" || no "a tarball install works" "$(tail -4 "$TMP/out")"
+else
+  ok "no release workflow to check (--no-release)"
+fi
+
 echo "behaviour"
 # TODO: the tests that actually matter. Feed the thing its real input and check
 # what it does — an installer test proves nothing about whether it works.

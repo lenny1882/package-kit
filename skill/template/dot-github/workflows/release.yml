@@ -50,7 +50,7 @@ jobs:
           git archive --format=tar.gz \
             --prefix="__PKG__/" \
             -o "__PKG__.tar.gz" \
-            "$TAG" -- __PAYLOAD__ install.sh uninstall.sh update.sh VERSION README.md
+            "$TAG" -- __PAYLOAD__ manifest.sh install.sh uninstall.sh update.sh VERSION README.md
 
       - name: Create GitHub Release
         env:
