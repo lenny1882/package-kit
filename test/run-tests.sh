@@ -9,6 +9,7 @@ NEW="$REPO/skill/bin/new-package.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
 
+REPO_SNAPSHOT=$(find "$REPO" -path "$REPO/.git" -prune -o -print | sort)
 pass=0; fail=0
 ok(){ printf '  ok    %s\n' "$1"; pass=$((pass+1)); }
 no(){ printf '  FAIL  %s\n    %s\n' "$1" "$2"; fail=$((fail+1)); }
@@ -166,6 +167,15 @@ grep -q "it does what it is supposed to" "$TMP/o" \
   && ok "and the probe passes from a copy install" || no "and the probe passes from a copy install" "$(tail -4 "$TMP/o")"
 [ -f "$CLAUDE_DIR/skills/claude-package-kit/bin/new-package.sh" ] \
   && ok "the scaffolder survives the round trip" || no "the scaffolder survives the round trip" "missing"
+
+echo "the suite itself"
+# A test run must leave the checkout exactly as it found it. This is here
+# because one of these suites did not: python's py_compile wrote a __pycache__
+# directory into the source tree, which shows up as an untracked file long
+# after anyone remembers running the tests.
+after=$(find "$REPO" -path "$REPO/.git" -prune -o -print | sort)
+[ "$REPO_SNAPSHOT" = "$after" ] \
+  && ok "leaves nothing behind in the checkout" || no "leaves nothing behind in the checkout" "$(diff <(printf '%s\n' "$REPO_SNAPSHOT") <(printf '%s\n' "$after") | head -4)"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]
