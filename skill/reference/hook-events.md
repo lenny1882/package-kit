@@ -28,10 +28,31 @@ ever "tidied up" to `ask`, it stops working and nothing visibly breaks.
 
 ## Events worth knowing
 
-`PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `SessionStart`, `SessionEnd`,
-`Stop`, `SubagentStart`, `SubagentStop`, `PreCompact`, `PostCompact`,
-`Notification`, `PermissionRequest`, `ConfigChange`, `CwdChanged`,
-`FileChanged`, `TaskCreated`, `TaskCompleted`, and more.
+`PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `UserPromptExpansion`,
+`SessionStart`, `SessionEnd`, `Stop`, `SubagentStart`, `SubagentStop`,
+`PreCompact`, `PostCompact`, `Notification`, `PermissionRequest`,
+`ConfigChange`, `CwdChanged`, `FileChanged`, `TaskCreated`, `TaskCompleted`,
+and more.
+
+**`UserPromptExpansion`** is the event for a slash command the user typed. A
+typed `/gsd:discuss-phase` never becomes a `Skill` tool call, so a `PreToolUse`
+hook with matcher `Skill` never sees it — that gap is easy to miss, because the
+same command started by Claude does go through `PreToolUse`. Catching both means
+registering one script on both events.
+
+It receives `expansion_type` (`slash_command` or `mcp_prompt`), `command_name`,
+`command_args`, `command_source`, and `prompt`, which is `/<name> <args>`. The
+matcher is compared against `command_name`; leaving the matcher out runs the hook
+on every slash command, which is the safe choice when you are not certain what
+name a plugin's command registers under, since a matcher that misses fails
+silently.
+
+Exit 2 blocks it. The block sets `shouldQuery: false`, so **Claude is not invoked
+at all** — the stderr is printed to the user as a terminal warning, followed by
+`Original prompt: <the command>`. A refusal here has to tell the *user* what to
+do; there is no model turn to instruct. That is the opposite of the `PreToolUse`
+convention above, and getting it backwards produces a message nobody acts on.
+Confirmed against 2.1.259 on 3 Sep 2026.
 
 **`PreCompact`** matches `manual` (from `/compact`) or `auto`, and receives
 `transcript_path`, `cwd`, `trigger` and `custom_instructions`. Exit 2 cancels

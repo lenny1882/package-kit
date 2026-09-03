@@ -19,9 +19,22 @@ no record of why it exists.
 
 ## 1. Before writing anything
 
-Read `/home/james/claude-sandbox/INVENTORY.md`. It says what already exists and
-how well packaged each one is. If the ask is close to something already there,
-extend that package rather than starting another.
+Read the inventory. It says what already exists and how well packaged each one
+is. If the ask is close to something already there, extend that package rather
+than starting another.
+
+Find it with the first of these that names a file:
+
+```bash
+: "${CLAUDE_INVENTORY:=}"
+for f in "$CLAUDE_INVENTORY" "$CLAUDE_PROJECT_DIR/INVENTORY.md" \
+         "$HOME/claude-sandbox/INVENTORY.md"; do
+  [ -n "$f" ] && [ -f "$f" ] && { echo "$f"; break; }
+done
+```
+
+If none of them exists there is no inventory on this machine — say so and carry
+on. A missing inventory is not a reason to stop.
 
 Decide with the user, not for them:
 
@@ -29,9 +42,10 @@ Decide with the user, not for them:
   Claude loads on demand; `command` is an executable on `PATH`. A thing that
   needs to *stop* Claude doing something is a hook. A thing that tells Claude
   *how* to do something is a skill.
-- **Where it lives.** `~/claude-sandbox/<name>` for local-only work, or
-  `/mnt/sda/Development/github-lenny1882/<name>` for anything intended to be
-  published. Both use the same layout, so this can be changed later by moving
+- **Where it lives.** Ask, and offer what this machine already uses: the
+  directory holding the inventory found above for local-only work, or the
+  directory the published packages sit in — the parent of this repo's own
+  checkout. Both use the same layout, so this can be changed later by moving
   the directory.
 
 ## 2. Scaffold it
@@ -78,8 +92,9 @@ The generated files leave three things marked, and each one matters:
 command to run rather than running it. If Claude Code is already running,
 `/hooks` forces a settings reload; a new hook still needs a restart.
 
-Then add a row to `INVENTORY.md` naming the installed file exactly as it appears
+Then add a row to the inventory naming the installed file exactly as it appears
 on disk. `inventory-guard` matches by basename and will block the turn otherwise.
+Skip this when there is no inventory file.
 
 ## 5. Publishing
 

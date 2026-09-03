@@ -28,7 +28,21 @@ STATE_DIRS=(
 #
 # Every event name is valid here — PreToolUse, PostToolUse, SessionStart, Stop,
 # PreCompact, and the rest. Matchers are per-event: a tool name for PreToolUse,
-# startup/resume/clear for SessionStart, manual/auto for PreCompact.
+# startup/resume/clear for SessionStart, manual/auto for PreCompact,
+# a command name for UserPromptExpansion.
+#
+# A slash command the user typed never becomes a Skill tool call, so a
+# PreToolUse matcher on Skill sees only the ones Claude starts itself. Catching
+# both means registering the same script on UserPromptExpansion as well, and
+# leaving the matcher out so it fires on every command — a matcher that misses
+# fails silently. Add this branch alongside the one below when that is what the
+# hook is for:
+#
+#     | .hooks.UserPromptExpansion = ((.hooks.UserPromptExpansion // []) + [
+#         { hooks: [{ type: "command", command: $cmd }] }
+#       ])
+#
+# Its exit 2 goes to the user, not to Claude — see reference/hook-events.md.
 settings_merge() {
   jq --arg cmd "~/.claude/hooks/$PKG.sh" '
     .hooks //= {}
