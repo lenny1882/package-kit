@@ -17,6 +17,23 @@ So a hook that wants a human writes `deny` and spends its refusal text telling
 Claude what to ask. Both guard hooks on this machine work that way. If either is
 ever "tidied up" to `ask`, it stops working and nothing visibly breaks.
 
+That was established at 2.1.228 and **has not been re-confirmed since**. Testing
+it needs an interactive session, because hooks are read at startup and a
+headless run behaves differently: at 2.1.259 a hook returning `ask` under
+`--permission-mode auto` and under `manual` refused identically — the command
+did not run and the reason went to Claude, which offered to retry. That is the
+documented headless behaviour, stated in the binary for `PreModelSwitch` as "a
+headless session refuses instead", so it tells you nothing about what auto mode
+does with a human present. Until someone runs it interactively, keep writing
+`deny`.
+
+There is now a fourth decision, `defer`, alongside `allow`, `deny` and `ask`. It
+parks the tool call to be resolved in a later resumed session rather than
+deciding now — and the resume does not restore the permission mode it was
+deferred under, so `--resume` needs `--permission-mode` passed again to match. A
+call being served to a cloud session cannot be deferred at all; there is no
+resume machinery for it, and the deferral is turned into a denial.
+
 ## Exit codes
 
 - **0** — allowed. On most events stdout is ignored; the exceptions are below.
