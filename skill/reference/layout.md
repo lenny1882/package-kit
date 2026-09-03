@@ -44,6 +44,27 @@ These are not stylistic. Each one exists because of something that went wrong.
 - **Say what to do next.** `/hooks` forces a settings reload in a running
   session; a newly added hook needs a restart.
 
+## Registering a hook
+
+Two mistakes cost a working guard, both of them silent.
+
+**A typed slash command is not a `Skill` tool call.** When Claude reaches for a
+skill, `PreToolUse` sees it with matcher `Skill`. When the user types
+`/gsd:plan-phase`, it goes to `UserPromptExpansion` instead and a `PreToolUse`
+hook never runs. A guard on planning commands registered only on `PreToolUse`
+lets every typed one through. Register on both, and read the name from
+`.tool_input.skill` *or* `.command_name` — the field differs by event, so a
+script ported across without that change finds nothing and waves everything
+past while looking installed.
+
+**Guarding a tool is not guarding the job.** A hook that holds `Read` at the
+prompt does not stop the file being read; Claude will reach for `cat` through
+`Bash` instead and carry on. Work out every tool that reaches the thing you care
+about, or accept the guard is advisory.
+
+See `reference/hook-events.md` for the payloads and what each event does with
+exit 2.
+
 ## Naming
 
 Kebab-case, and never containing `gsd-`. GSD's session-start migration deletes
