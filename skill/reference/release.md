@@ -59,11 +59,21 @@ In outline, and with the user's agreement at each push:
 
 1. `main` clean, fetched, and genuinely worth releasing.
 2. Bump `VERSION`, commit as `Bump version to X.Y.Z`, push `main`.
-3. Merge `main` into `release/vX.x` — fast-forward is the expected case, and a
-   conflict means the branch diverged some other way, so stop and ask.
-4. `git tag -a vX.Y.Z -m "<name> vX.Y.Z"` on that branch, push the tag. This is
-   the step that publishes.
-5. Back to `main`, and point the user at the Actions run and then the release.
+3. Move `release/vX.x` onto the new commit **without checking it out**:
+   `git merge-base --is-ancestor release/vX.x main` to confirm a fast-forward,
+   then `git fetch . main:release/vX.x` to move it. Check it actually moved,
+   then push. A non-zero exit from the first command means the branch diverged
+   some other way, so stop and ask.
+4. `git tag -a vX.Y.Z release/vX.x -m "<name> vX.Y.Z"`, naming the branch, and
+   verify with `git branch --contains vX.Y.Z`. Push the tag. This is the step
+   that publishes.
+5. Point the user at the Actions run and then the release.
+
+Step 3 is written that way because checking the branch out and running
+`git merge main` went wrong once: the merge said "Already up-to-date", the
+branch never moved, and the tag ended up on `main` — the one thing the branch
+rule exists to prevent. Run those commands one at a time and read the output of
+each.
 
 ## Versioning
 
