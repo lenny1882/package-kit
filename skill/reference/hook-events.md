@@ -88,6 +88,18 @@ The ones added since this page was first written:
   `include`, `compact`), plus `globs`, `trigger_file_path` and
   `parent_file_path` when they apply; matcher is `load_reason`. Stated as
   observability-only — it cannot block.
+- **`DirectoryAdded`** — after `/add-dir` or the `register_repo_root` SDK
+  control request adds a working directory. Gets `directory` and `source`
+  (`slash_command` or `register_repo_root`), which is also the matcher. It runs
+  *after* the sandbox configuration is refreshed, so the new directory is
+  already visible to sandboxed tools by the time the hook sees it — and hook
+  commands themselves run unsandboxed either way.
+- **`MessageDisplay`** — fires while Claude's reply is being printed. Gets
+  `turn_id`, `message_id`, `index`, `final` and `delta`, the newly completed
+  lines, and can return `displayContent` to **replace that text on screen**.
+  Display-only: the stored message and what the model sees are untouched, so
+  the transcript and the terminal can be made to disagree. A non-zero exit
+  falls back to printing the original.
 
 **`UserPromptExpansion`** is the event for a slash command the user typed. A
 typed `/gsd:discuss-phase` never becomes a `Skill` tool call, so a `PreToolUse`
