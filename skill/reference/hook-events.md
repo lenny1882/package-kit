@@ -7,25 +7,40 @@ can withdraw an undocumented behaviour without saying so.
 
 ## Deny, not ask
 
-A `PreToolUse` hook can return `ask`, which reads like the obvious way to put a
-decision to the user. **In auto mode it never reaches them.** The harness
-resolves an `ask` through the same classifier that approves ordinary tool calls,
-and it approved a test command silently. `deny` is the only decision beyond its
-reach.
+At 2.1.228 a `PreToolUse` hook returning `ask` never reached the user in auto
+mode — the harness resolved it through the same classifier that approves
+ordinary tool calls, and it approved a test command silently.
 
-So a hook that wants a human writes `deny` and spends its refusal text telling
-Claude what to ask. Both guard hooks on this machine work that way. If either is
-ever "tidied up" to `ask`, it stops working and nothing visibly breaks.
+**That is no longer true.** Re-tested at 2.1.259 in an interactive session under
+`--permission-mode auto`, with a hook returning `ask` on every `Read`. The hook
+fired and the dialog appeared:
 
-That was established at 2.1.228 and **has not been re-confirmed since**. Testing
-it needs an interactive session, because hooks are read at startup and a
-headless run behaves differently: at 2.1.259 a hook returning `ask` under
-`--permission-mode auto` and under `manual` refused identically — the command
-did not run and the reason went to Claude, which offered to retry. That is the
-documented headless behaviour, stated in the binary for `PreModelSwitch` as "a
-headless session refuses instead", so it tells you nothing about what auto mode
-does with a human present. Until someone runs it interactively, keep writing
-`deny`.
+```
+Read(/tmp/…/target.txt)
+Do you want to proceed?
+❯ 1. Yes
+  2. No
+Esc to cancel · Tab to amend
+```
+
+Two things to know before relying on it.
+
+**The reason is not shown.** `permissionDecisionReason` appeared nowhere on
+screen — the dialog names the tool call and asks. Whatever the hook wanted to
+explain, the person deciding does not see it. A `deny` still carries its message,
+so a hook with something to say is still better off denying and spending the
+text on it.
+
+**A hook on one tool does not cover the job that tool does.** In the first run
+the same probe held `Read` at the prompt, and Claude simply read the file with
+`cat` through `Bash`, which had no hook on it, and carried on. Guard the
+intention, not the tool: work out every tool that reaches the thing you care
+about, or accept that the guard is advisory.
+
+A headless run tells you nothing here. At 2.1.259 `ask` under `auto` and under
+`manual` both refused identically, which is the documented headless behaviour —
+the binary states it for `PreModelSwitch` as "a headless session refuses
+instead". Test this one interactively or not at all.
 
 There is now a fourth decision, `defer`, alongside `allow`, `deny` and `ask`. It
 parks the tool call to be resolved in a later resumed session rather than
