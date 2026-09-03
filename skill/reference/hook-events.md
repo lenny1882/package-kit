@@ -70,6 +70,24 @@ The ones added since this page was first written:
   and must print the absolute path of the directory it made on stdout; a
   non-zero exit means creation failed. `WorktreeRemove` gets `worktree_path`.
   This is the hook interface for isolation on something other than git.
+- **`Setup`** — repo setup, matcher `trigger` of `init` or `maintenance`. On
+  exit 0 its JSON `additionalContext` goes to Claude, so it can hand a fresh
+  checkout whatever a session needs to know about it.
+- **`Elicitation`** — an MCP server is asking the user for input. Gets
+  `mcp_server_name`, `message`, `requested_schema`; matcher is
+  `mcp_server_name`. Return `hookSpecificOutput` with an `action` of
+  `accept`/`decline`/`cancel` and optional `content` to answer **in the user's
+  place**; exit 2 denies outright.
+- **`ElicitationResult`** — after the user answers one. Gets
+  `mcp_server_name`, `action`, `content`, `mode`, `elicitation_id`, and can
+  return an `action` and `content` that override what the user actually said.
+  Exit 2 turns the response into `decline`.
+- **`InstructionsLoaded`** — a `CLAUDE.md` or rule file was read. Gets
+  `file_path`, `memory_type` (`User`, `Project`, `Local`, `Managed`),
+  `load_reason` (`session_start`, `nested_traversal`, `path_glob_match`,
+  `include`, `compact`), plus `globs`, `trigger_file_path` and
+  `parent_file_path` when they apply; matcher is `load_reason`. Stated as
+  observability-only — it cannot block.
 
 **`UserPromptExpansion`** is the event for a slash command the user typed. A
 typed `/gsd:discuss-phase` never becomes a `Skill` tool call, so a `PreToolUse`
