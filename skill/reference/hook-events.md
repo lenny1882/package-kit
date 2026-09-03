@@ -1,9 +1,9 @@
 # What hooks can actually do
 
 Most of this is not in the documentation. It was read out of the compiled
-Claude Code binary at 2.1.228 and confirmed by running it. Check it still holds
-before relying on any of it in a new package — an update can withdraw an
-undocumented behaviour without saying so.
+Claude Code binary at 2.1.228, re-read at 2.1.259, and confirmed by running it.
+Check it still holds before relying on any of it in a new package — an update
+can withdraw an undocumented behaviour without saying so.
 
 ## Deny, not ask
 
@@ -28,11 +28,48 @@ ever "tidied up" to `ask`, it stops working and nothing visibly breaks.
 
 ## Events worth knowing
 
-`PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `UserPromptExpansion`,
-`SessionStart`, `SessionEnd`, `Stop`, `SubagentStart`, `SubagentStop`,
-`PreCompact`, `PostCompact`, `Notification`, `PermissionRequest`,
-`ConfigChange`, `CwdChanged`, `FileChanged`, `TaskCreated`, `TaskCompleted`,
-and more.
+The whole roster at 2.1.259, in the order the binary declares it:
+
+`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`,
+`PermissionDenied`, `Notification`, `UserPromptSubmit`, `UserPromptExpansion`,
+`SessionStart`, `Stop`, `StopFailure`, `SubagentStart`, `SubagentStop`,
+`PreCompact`, `PostCompact`, `PreModelSwitch`, `PostModelSwitch`, `SessionEnd`,
+`PermissionRequest`, `Setup`, `TeammateIdle`, `TaskCreated`, `TaskCompleted`,
+`Elicitation`, `ElicitationResult`, `ConfigChange`, `InstructionsLoaded`,
+`WorktreeCreate`, `WorktreeRemove`, `CwdChanged`, `FileChanged`,
+`DirectoryAdded`, `MessageDisplay`.
+
+The ones added since this page was first written:
+
+- **`PostToolUseFailure`** — a tool call failed. Gets `tool_name`, `tool_input`,
+  `tool_use_id`, `error`, `error_type`, `is_interrupt`, `is_timeout`; matcher is
+  `tool_name`. Exit 2 shows stderr to the model immediately.
+- **`PostToolBatch`** — fires once after every call in a batch resolves, before
+  the next model request. Gets `tool_calls`, an array of `{tool_name,
+  tool_input, tool_use_id, tool_response}`. Return `additionalContext` through
+  `hookSpecificOutput` to inject context once for the whole batch instead of
+  once per call. Exit 2 stops the agentic loop.
+- **`PermissionDenied`** — the auto-mode classifier refused a call. Gets
+  `tool_name`, `tool_input`, `tool_use_id`, `reason`. Return
+  `{"hookSpecificOutput":{"hookEventName":"PermissionDenied","retry":true}}` to
+  tell the model it may try again.
+- **`StopFailure`** — fires *instead of* `Stop` when an API error ended the
+  turn. Matcher is `error`: `rate_limit`, `overloaded`,
+  `authentication_failed`, `billing_error`, `max_output_tokens` and the rest.
+  Fire-and-forget — output and exit codes are ignored, so it cannot hold a turn
+  open the way `Stop` can.
+- **`PreModelSwitch`** / **`PostModelSwitch`** — a `/model`, picker or
+  `set_model` change. Both get `from_model`, `to_model`, `requested_model`,
+  `source`, `context_tokens` and the estimated re-cache cost; matcher is
+  `to_model`. `PreModelSwitch` takes a `permissionDecision` of allow/deny/ask
+  exactly as `PreToolUse` does, and exit 2 blocks the switch.
+- **`TeammateIdle`** — a teammate is about to go idle. Gets `teammate_name` and
+  `team_name`. Exit 2 sends stderr to the teammate and keeps it working.
+- **`WorktreeCreate`** / **`WorktreeRemove`** — these two *implement* worktrees
+  rather than observing them. `WorktreeCreate` gets `name`, a suggested slug,
+  and must print the absolute path of the directory it made on stdout; a
+  non-zero exit means creation failed. `WorktreeRemove` gets `worktree_path`.
+  This is the hook interface for isolation on something other than git.
 
 **`UserPromptExpansion`** is the event for a slash command the user typed. A
 typed `/gsd:discuss-phase` never becomes a `Skill` tool call, so a `PreToolUse`
