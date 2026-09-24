@@ -103,6 +103,40 @@ grep -q "someone-elses-thing" "$CLAUDE_DIR/settings.json" \
 grep -q "test-hook" "$CLAUDE_DIR/settings.json" \
   && no "uninstall removes its own entries" "still there" || ok "uninstall removes its own entries"
 
+echo "a package bundling several hooks"
+# The second script's name does not contain the package name, so OWNS alone
+# never finds its entry: a reinstall would add a duplicate beside the stale one,
+# and uninstall would leave it behind.
+"$NEW" --name test-bundle --kind hook --dir "$TMP" >/dev/null 2>&1
+B="$TMP/test-bundle"
+cp "$B/hooks/test-bundle.sh" "$B/hooks/second-check.sh"
+cat >>"$B/manifest.sh" <<'EOF'
+FILES+=("hooks/second-check.sh:$CLAUDE_DIR/hooks/second-check.sh")
+settings_merge() {
+  jq '
+    .hooks //= {}
+    | .hooks.PreToolUse = ((.hooks.PreToolUse // []) + [
+        { matcher: "Bash", hooks: [{ type: "command", command: "~/.claude/hooks/test-bundle.sh" }] },
+        { matcher: "Bash", hooks: [{ type: "command", command: "~/.claude/hooks/second-check.sh" }] }
+      ])
+  '
+}
+EOF
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"someone-elses-thing"}]}]}}\n' > "$CLAUDE_DIR/settings.json"
+"$B/install.sh" --link --yes >"$TMP/o" 2>&1 \
+  && ok "installs" || no "installs" "$(tail -4 "$TMP/o")"
+grep -q "someone-elses-thing" "$CLAUDE_DIR/settings.json" \
+  && ok "and leaves other packages alone" || no "and leaves other packages alone" "wiped them"
+"$B/install.sh" --link --yes >/dev/null 2>&1
+n=$(grep -c "second-check.sh" "$CLAUDE_DIR/settings.json")
+[ "$n" -eq 1 ] && ok "reinstalling replaces the second script's entry" \
+  || no "reinstalling replaces the second script's entry" "$n entries"
+"$B/uninstall.sh" --yes >/dev/null 2>&1
+grep -q "second-check.sh" "$CLAUDE_DIR/settings.json" \
+  && no "uninstall removes the second script's entry" "still there" || ok "uninstall removes the second script's entry"
+grep -q "someone-elses-thing" "$CLAUDE_DIR/settings.json" \
+  && ok "and spares other packages" || no "and spares other packages" "removed them"
+
 echo "the generated tests fail until behaviour is tested"
 "$TMP/test-hook/test/run-tests.sh" >"$TMP/o" 2>&1
 grep -q "no behaviour tests written yet" "$TMP/o" \

@@ -54,12 +54,19 @@ elif [ ! -f "$SETTINGS" ]; then
   ok "no $SETTINGS"
 elif ! jq empty "$SETTINGS" 2>/dev/null; then
   warn "$SETTINGS is not valid JSON — leaving it untouched."
-  warn "Remove the hook entries whose command contains '$OWNS' by hand."
+  warn "Remove the hook entries whose command contains '$OWNS' or one of its script names by hand."
 elif confirm "  Remove this package's hook entries?"; then
   cp "$SETTINGS" "$SETTINGS.bak-uninstall"
+  # Match OWNS and each installed script's basename, as install.sh does, so a
+  # package bundling several hooks removes the entries of every one of them.
+  owns_json=$(
+    { [ -n "${OWNS:-}" ] && printf '%s\n' "$OWNS"
+      for entry in ${FILES[@]+"${FILES[@]}"}; do basename "${entry#*:}"; done
+    } | sort -u | jq -R . | jq -s .
+  )
   tmp=$(mktemp)
-  jq --arg owns "$OWNS" '
-    def ours: (.command // "") | contains($owns);
+  jq --argjson owns "$owns_json" '
+    def ours: (.command // "") as $c | any($owns[]; . as $o | $c | contains($o));
     def strip_ours: map(.hooks |= map(select(ours | not))) | map(select((.hooks | length) > 0));
     if (.hooks | type) == "object" then
       .hooks |= with_entries(if (.value | type) == "array" then .value |= strip_ours else . end)
