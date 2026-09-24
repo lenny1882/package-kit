@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Update __PKG__ to the newest GitHub Release, then re-run the installer.
+# Update __PKG__ to its newest release, then re-run the installer.
 #
-# "Newest" means whatever the GitHub Releases API calls /releases/latest — a
-# release left as a draft, or marked pre-release, is skipped no matter how its
-# version number sorts. This downloads that release's __PKG__.tar.gz
-# asset and extracts it over this directory, so it works the same whether you
-# installed from a downloaded tarball or a git clone — no git required.
+# "Newest" is whatever the release lookup below reports; a draft or a
+# pre-release is never offered, no matter how its version number sorts. This
+# downloads that release's __PKG__.tar.gz asset and extracts it over this
+# directory, so it works the same whether you installed from a downloaded
+# tarball or a git clone — no git required.
 #
 #   ./update.sh            check, ask, upgrade, reinstall
 #   ./update.sh --check    report what is available and stop
@@ -14,8 +14,7 @@
 # Any other options are passed straight through to install.sh, so
 # `./update.sh --link` upgrades a symlinked development install.
 #
-# Needs `curl` and `tar`; `jq` is used when present and otherwise a plain-text
-# scrape of the API response takes over.
+# Needs `curl` and `tar`.
 
 set -euo pipefail
 
@@ -23,6 +22,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT="__PKG__"
 GITHUB_SLUG="__SLUG__"
 TARBALL_NAME="__PKG__.tar.gz"
+CURL=(curl)
 
 [ -f "$REPO/VERSION" ] || {
   printf '%s does not look like a %s install (no VERSION file).\n' "$REPO" "$PROJECT" >&2
@@ -35,7 +35,7 @@ for a in "$@"; do
   case "$a" in
     --check)   CHECK_ONLY=1 ;;
     --yes|-y)  ASSUME_YES=1; PASSTHROUGH+=("$a") ;;
-    -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)         PASSTHROUGH+=("$a") ;;
   esac
 done
@@ -50,36 +50,12 @@ confirm() {
   case "$reply" in [Nn]*) return 1 ;; *) return 0 ;; esac
 }
 
-# Pull one string field out of a JSON blob: $1 is the JSON, $2 the field name.
-json_field() {
-  if command -v jq >/dev/null 2>&1; then
-    printf '%s' "$1" | jq -r --arg f "$2" '.[$f] // empty'
-  else
-    printf '%s' "$1" \
-      | grep -o "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 \
-      | sed -E 's/.*:[[:space:]]*"(.*)"$/\1/'
-  fi
-}
+__LOOKUP__
 
 say "== $PROJECT — installed v$CURRENT"
-say "   asking github.com/$GITHUB_SLUG for the latest release"
+say "   asking github.com/$GITHUB_SLUG for the newest release"
 
-response=$(curl -sSL -w '\n%{http_code}' -H 'Accept: application/vnd.github+json' \
-  "https://api.github.com/repos/$GITHUB_SLUG/releases/latest") \
-  || die "Could not reach the GitHub Releases API. Check the network."
-http_code=$(printf '%s' "$response" | tail -1)
-release_json=$(printf '%s' "$response" | sed '$d')
-
-case "$http_code" in
-  200) ;;
-  404) die "GitHub reports no releases yet for $GITHUB_SLUG." ;;
-  *)   die "GitHub Releases API returned HTTP $http_code for $GITHUB_SLUG." ;;
-esac
-
-tag=$(json_field "$release_json" tag_name)
-[ -n "$tag" ] || die "GitHub reports no releases yet for $GITHUB_SLUG."
-latest="${tag#v}"
-rel_url=$(json_field "$release_json" html_url)
+release_lookup || die "$lookup_error"
 
 # sort -V puts 1.10.0 above 1.9.0, which a string comparison gets backwards.
 if [ "$latest" = "$CURRENT" ] \

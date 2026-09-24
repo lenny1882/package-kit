@@ -68,6 +68,13 @@ OUT="$DIR/$NAME"
 
 sub(){ sed -e "s|__SLUG__|$SLUG|g" -e "s|__PAYLOAD__|$PAYLOAD|g" -e "s|__PKG__|$NAME|g"; }
 
+# update.sh and lib/update-check.sh share one way of finding the newest
+# release, kept in template/lookup/ and inserted at their __LOOKUP__ line. A
+# standalone package asks /releases/latest; only that lookup is written, so the
+# generated scripts carry no code for any other case.
+LOOKUP="$TEMPLATE/lookup/releases-latest.sh"
+with_lookup(){ sed -e '/^__LOOKUP__$/{' -e "r $LOOKUP" -e 'd' -e '}' "$1" | sub; }
+
 mkdir -p "$OUT/test"
 sub < "$TEMPLATE/install.sh"        > "$OUT/install.sh"
 sub < "$TEMPLATE/uninstall.sh"      > "$OUT/uninstall.sh"
@@ -91,8 +98,8 @@ esac
 
 if [ "$RELEASE" -eq 1 ]; then
   mkdir -p "$OUT/lib" "$OUT/.github/workflows" "$OUT/.claude/skills/release"
-  sub < "$TEMPLATE/update.sh"                            > "$OUT/update.sh"
-  sub < "$TEMPLATE/lib/update-check.sh"                  > "$OUT/lib/update-check.sh"
+  with_lookup "$TEMPLATE/update.sh"                      > "$OUT/update.sh"
+  with_lookup "$TEMPLATE/lib/update-check.sh"            > "$OUT/lib/update-check.sh"
   sub < "$TEMPLATE/dot-github/workflows/release.yml"     > "$OUT/.github/workflows/release.yml"
   sub < "$TEMPLATE/dot-claude/skills/release/SKILL.md"   > "$OUT/.claude/skills/release/SKILL.md"
 fi

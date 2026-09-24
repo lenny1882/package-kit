@@ -81,6 +81,38 @@ grep -q -- 'manifest.sh install.sh uninstall.sh update.sh VERSION README.md' "$o
 grep -q -- '-- skill lib manifest.sh' "$TMP/test-skill/.github/workflows/release.yml" \
   && ok "a skill's tarball carries lib/ too" || no "a skill's tarball carries lib/ too" "$(grep 'TAG" --' "$TMP/test-skill/.github/workflows/release.yml")"
 
+echo "the release lookup"
+# update.sh and lib/update-check.sh get their lookup inserted by the
+# scaffolder. A standalone package gets /releases/latest and nothing else.
+for f in update.sh lib/update-check.sh; do
+  bash -n "$out/$f" && ok "$f parses" || no "$f parses" "syntax error"
+  grep -q '__LOOKUP__' "$out/$f" \
+    && no "$f has its lookup inserted" "marker left in" || ok "$f has its lookup inserted"
+  grep -q 'releases/latest' "$out/$f" && ! grep -q 'versions.txt' "$out/$f" \
+    && ok "$f asks /releases/latest only" || no "$f asks /releases/latest only" "$(grep -n 'releases/latest\|versions.txt' "$out/$f")"
+done
+bash -n "$REPO/skill/template/lookup/versions-txt.sh" \
+  && ok "the monorepo lookup parses" || no "the monorepo lookup parses" "syntax error"
+# A stub curl stands in for the GitHub API, so this runs without network.
+mkdir -p "$TMP/stub"
+printf '#!/bin/sh\nprintf %s\n' "'{\"tag_name\":\"v9.9.9\",\"html_url\":\"https://example.invalid/r\"}\n200'" > "$TMP/stub/curl"
+chmod +x "$TMP/stub/curl"
+PATH="$TMP/stub:$PATH" "$out/update.sh" --check >"$TMP/o" 2>&1
+grep -q "v9.9.9 is available" "$TMP/o" \
+  && ok "update.sh reports a newer release" || no "update.sh reports a newer release" "$(tail -3 "$TMP/o")"
+export XDG_STATE_HOME="$TMP/state"
+"$out/lib/update-check.sh" record-install 0.1.0 "$out"
+PATH="$TMP/stub:$PATH" "$out/lib/update-check.sh" check --force
+"$out/lib/update-check.sh" status >"$TMP/o"
+grep -q 'available: *9.9.9' "$TMP/o" \
+  && ok "update-check.sh records it" || no "update-check.sh records it" "$(cat "$TMP/o")"
+printf '#!/bin/sh\nprintf %s\n' "'{}\n404'" > "$TMP/stub/curl"
+PATH="$TMP/stub:$PATH" "$out/update.sh" --check >"$TMP/o" 2>&1 \
+  && no "update.sh stops when there is no release" "exited 0" \
+  || { grep -q "no releases yet" "$TMP/o" && ok "update.sh stops when there is no release" \
+       || no "update.sh stops when there is no release" "$(tail -2 "$TMP/o")"; }
+unset XDG_STATE_HOME
+
 "$NEW" --name test-bare --kind hook --dir "$TMP" --no-release >/dev/null 2>&1
 [ ! -e "$TMP/test-bare/update.sh" ] && ok "--no-release leaves the release machinery out" || no "--no-release leaves the release machinery out" "update.sh present"
 

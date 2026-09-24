@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
 # Daily release check for claude-package-kit.
 #
-# Asks the GitHub Releases API what the latest release is, compares it against
-# the version recorded at install time, and writes the answer to a state file.
-# It never fetches, never touches the install directory, and never installs
-# anything — upgrading is always an explicit `./update.sh`.
+# Asks the release lookup below what the newest release is, compares it
+# against the version recorded at install time, and writes the answer to a
+# state file. It never fetches, never touches the install directory, and never
+# installs anything — upgrading is always an explicit `./update.sh`.
 #
-# Releases are GitHub Releases tagged vX.Y.Z. The `/releases/latest` endpoint
-# is what decides "latest" here, so a release left as a draft or marked
-# pre-release is skipped automatically, no matter how its version number
-# sorts. update.sh downloads that release's claude-package-kit.tar.gz asset
-# directly — no git involved, so this works the same whether the install
-# came from a git clone or a downloaded tarball.
+# A release left as a draft or marked pre-release is never reported, no
+# matter how its version number sorts. update.sh downloads that release's
+# claude-package-kit.tar.gz asset directly — no git involved, so this works the same
+# whether the install came from a git clone or a downloaded tarball.
 #
 # The check runs at most once per calendar day. Callers should run it in the
 # background: a remote that is unreachable, slow, or asking for credentials
@@ -19,8 +17,7 @@
 # that reason, and the day stamp is written even when the check fails, so an
 # offline machine tries once a day rather than every session.
 #
-# Needs `curl` and, ideally, `jq` (falls back to a plain-text scrape of the
-# JSON if `jq` isn't installed).
+# Needs `curl`.
 #
 # Everything a caller displays comes from the *previous* run's state file. That
 # is deliberate: reading a file is instant, whereas waiting on the network is
@@ -39,6 +36,7 @@ set -uo pipefail
 PROJECT="claude-package-kit"
 DISPLAY_NAME="claude-package-kit"
 GITHUB_SLUG="lenny1882/package-kit"
+CURL=(timeout 8 curl)
 
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/$PROJECT"
 STAMP="$STATE/last-check"
@@ -57,9 +55,19 @@ newer_than() {
   [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$2" ]
 }
 
+# --- release lookup: GitHub's /releases/latest -------------------------------
+# new-package.sh inserts this for a package that has a repo to itself. The
+# newest release in the repo is then this package's newest, and the endpoint
+# skips a release left as a draft or marked pre-release no matter how its
+# version number sorts.
+#
+# release_lookup sets tag, latest and rel_url, or returns 1 with the reason in
+# lookup_error. It runs curl as "${CURL[@]}", so a caller can wrap it in
+# `timeout`. `jq` is used when present; otherwise a plain-text scrape of the
+# API response takes over.
+
 # Pull one string field out of a JSON blob: $1 is the JSON, $2 the field name.
-# Uses jq when available; otherwise a plain-text scrape that's good enough for
-# the flat string fields the GitHub API returns (tag_name, html_url).
+# The scrape is good enough for the flat string fields read here.
 json_field() {
   if command -v jq >/dev/null 2>&1; then
     printf '%s' "$1" | jq -r --arg f "$2" '.[$f] // empty'
@@ -68,6 +76,28 @@ json_field() {
       | grep -o "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 \
       | sed -E 's/.*:[[:space:]]*"(.*)"$/\1/'
   fi
+}
+
+release_lookup() {
+  local response http_code json
+  tag=""; latest=""; rel_url=""; lookup_error=""
+
+  response=$("${CURL[@]}" -sSL -w '\n%{http_code}' -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/$GITHUB_SLUG/releases/latest" 2>/dev/null) \
+    || { lookup_error="Could not reach the GitHub Releases API. Check the network."; return 1; }
+  http_code=$(printf '%s' "$response" | tail -1)
+  json=$(printf '%s' "$response" | sed '$d')
+
+  case "$http_code" in
+    200) ;;
+    404) lookup_error="GitHub reports no releases yet for $GITHUB_SLUG."; return 1 ;;
+    *)   lookup_error="GitHub Releases API returned HTTP $http_code for $GITHUB_SLUG."; return 1 ;;
+  esac
+
+  tag=$(json_field "$json" tag_name)
+  latest=$(printf '%s' "$tag" | sed 's/^v//' | grep -E '^[0-9]+(\.[0-9]+)*$') || true
+  [ -n "$latest" ] || { lookup_error="GitHub reports no releases yet for $GITHUB_SLUG."; return 1; }
+  rel_url=$(json_field "$json" html_url)
 }
 
 update_pending() {
@@ -80,7 +110,7 @@ update_pending() {
 # --- the check itself --------------------------------------------------------
 
 do_check() {
-  local repo json tag latest rel_url
+  local repo tag latest rel_url lookup_error
   mkdir -p "$STATE"
 
   repo=$(read_file "$REPO_F")
@@ -91,20 +121,12 @@ do_check() {
   # day, not one per session start.
   date +%F > "$STAMP"
 
-  json=$(timeout 8 curl -fsSL -H 'Accept: application/vnd.github+json' \
-    "https://api.github.com/repos/$GITHUB_SLUG/releases/latest" 2>/dev/null) || { : > "$AVAIL"; return 0; }
-
-  tag=$(json_field "$json" tag_name)
-  latest=$(printf '%s' "$tag" | sed 's/^v//' | grep -E '^[0-9]+(\.[0-9]+)*$') || true
-
-  if [ -z "$latest" ]; then
+  if ! release_lookup; then
     : > "$AVAIL"; : > "$URL_F"
     return 0
   fi
 
   printf '%s\n' "$latest" > "$AVAIL"
-
-  rel_url=$(json_field "$json" html_url)
   printf '%s\n' "$rel_url" > "$URL_F"
 }
 
