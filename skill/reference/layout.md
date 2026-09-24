@@ -81,6 +81,31 @@ such a name.
 The package name doubles as the substring the installer uses to find its own
 settings entries, so name the installed script after the package.
 
+### Renaming is an accepted risk
+
+The installer finds a package's own entries by the names it installs *now*: the
+package name and each script's basename. Rename either and a reinstall no
+longer recognises the entries registered under the old name. They stay in
+`settings.json` beside the new ones, pointing at a script that no longer exists,
+and the new version's `uninstall.sh` cannot remove them either.
+
+This is accepted rather than handled. Renames are rare, and the handling on
+offer — a list of former names in `manifest.sh`, or a record of registered
+commands in the state directory — is machinery for a case a person can deal
+with directly. **Whoever ships a rename must say so in the release, and whoever
+installs it must run the old version's `uninstall.sh` first, then install the
+new version from scratch.** Only the old version's uninstaller knows the old
+names. `update.sh` does not do this for them: it extracts the new version over
+the old, so the old `uninstall.sh` is gone before anything runs.
+
+A possible guard, not built: `update.sh` could compare the package name and
+the script names in the downloaded `manifest.sh` against the installed one, and
+refuse to continue on a mismatch, telling the user to uninstall and install
+from scratch.
+
+`maestro-drive` handles its own rename from `maestro-remote-mac` with a
+`LEGACY_OWNS` list in its manifest. That is the package's choice, not the kit's.
+
 ## Tests
 
 `test/run-tests.sh`, no framework, plain bash, `ok`/`no` counters and a
