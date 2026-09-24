@@ -6,6 +6,7 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NEW="$REPO/skill/bin/new-package.sh"
+NEWMONO="$REPO/skill/bin/new-monorepo.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
 
@@ -16,6 +17,7 @@ no(){ printf '  FAIL  %s\n    %s\n' "$1" "$2"; fail=$((fail+1)); }
 
 echo "sanity"
 bash -n "$NEW" && ok "scaffolder parses" || no "scaffolder parses" "syntax error"
+bash -n "$NEWMONO" && ok "monorepo scaffolder parses" || no "monorepo scaffolder parses" "syntax error"
 for f in "$REPO"/*.sh; do
   bash -n "$f" && ok "$(basename "$f") parses" || no "$(basename "$f") parses" "syntax error"
 done
@@ -115,6 +117,37 @@ unset XDG_STATE_HOME
 
 "$NEW" --name test-bare --kind hook --dir "$TMP" --no-release >/dev/null 2>&1
 [ ! -e "$TMP/test-bare/update.sh" ] && ok "--no-release leaves the release machinery out" || no "--no-release leaves the release machinery out" "update.sh present"
+
+echo "monorepo root"
+"$NEWMONO" --dir "$TMP" >/dev/null 2>&1 \
+  && no "--name is required" "accepted it" || ok "--name is required"
+"$NEWMONO" --name Bad_Name --dir "$TMP" >/dev/null 2>&1 \
+  && no "rejects non-kebab-case names" "accepted it" || ok "rejects non-kebab-case names"
+"$NEWMONO" --name test-mono --dir "$TMP" >"$TMP/o" 2>&1 \
+  && ok "scaffolds a monorepo root" || no "scaffolds a monorepo root" "$(tail -3 "$TMP/o")"
+M="$TMP/test-mono"
+for f in README.md test/run-tests.sh .gitignore .github/workflows/release.yml .claude/skills/release/SKILL.md; do
+  [ -f "$M/$f" ] && ok "carries $f" || no "carries $f" "missing"
+done
+[ -d "$M/packages" ] && [ -z "$(ls -A "$M/packages")" ] \
+  && ok "packages/ exists and is empty" || no "packages/ exists and is empty" "$(ls -A "$M/packages" 2>&1)"
+[ ! -e "$M/install.sh" ] && ok "has no root installer" || no "has no root installer" "install.sh present"
+grep -rq '__[A-Z]*__' "$M" \
+  && no "no placeholder left unfilled" "$(grep -rn '__[A-Z]*__' "$M" | head -3)" || ok "no placeholder left unfilled"
+grep -q 'raw.githubusercontent.com/lenny1882/test-mono/versions/versions.txt' "$M/README.md" \
+  && ok "the README installs through versions.txt" || no "the README installs through versions.txt" "$(grep -n versions.txt "$M/README.md")"
+grep -q -- '--monorepo' "$TMP/o" \
+  && ok "says how to add a package" || no "says how to add a package" "$(tail -4 "$TMP/o")"
+"$M/test/run-tests.sh" >"$TMP/o" 2>&1 \
+  && ok "its test runner passes with no packages" || no "its test runner passes with no packages" "$(tail -2 "$TMP/o")"
+"$NEWMONO" --name test-mono --dir "$TMP" >/dev/null 2>&1 \
+  && no "refuses an existing directory" "overwrote it" || ok "refuses an existing directory"
+"$NEWMONO" --name test-mono-bare --dir "$TMP" --no-release >/dev/null 2>&1
+[ ! -e "$TMP/test-mono-bare/.github" ] && [ ! -e "$TMP/test-mono-bare/.claude" ] \
+  && ok "--no-release leaves the release machinery out" || no "--no-release leaves the release machinery out" "present"
+"$NEWMONO" --name test-mono-slug --dir "$TMP" --slug someone/elsewhere >/dev/null 2>&1
+grep -q 'someone/elsewhere' "$TMP/test-mono-slug/README.md" \
+  && ok "--slug reaches the README" || no "--slug reaches the README" "not there"
 
 echo "the generated package installs and works"
 export CLAUDE_DIR="$TMP/claude"; mkdir -p "$CLAUDE_DIR"
