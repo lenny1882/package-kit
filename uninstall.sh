@@ -57,8 +57,9 @@ elif ! jq empty "$SETTINGS" 2>/dev/null; then
   warn "Remove the hook entries whose command contains '$OWNS' or one of its script names by hand."
 elif confirm "  Remove this package's hook entries?"; then
   cp "$SETTINGS" "$SETTINGS.bak-uninstall"
-  # Match OWNS and each installed script's basename, as install.sh does, so a
-  # package bundling several hooks removes the entries of every one of them.
+  # Match OWNS and each installed script's basename, each as a whole word, as
+  # install.sh does: a package bundling several hooks removes the entries of
+  # every one of them, and none of a sibling whose name merely starts the same.
   owns_json=$(
     { [ -n "${OWNS:-}" ] && printf '%s\n' "$OWNS"
       for entry in ${FILES[@]+"${FILES[@]}"}; do basename "${entry#*:}"; done
@@ -66,7 +67,9 @@ elif confirm "  Remove this package's hook entries?"; then
   )
   tmp=$(mktemp)
   jq --argjson owns "$owns_json" '
-    def ours: (.command // "") as $c | any($owns[]; . as $o | $c | contains($o));
+    def ours: (.command // "") as $c
+      | any($owns[]; gsub("[.]"; "\\.") as $o
+          | $c | test("(^|[^A-Za-z0-9_-])" + $o + "($|[^A-Za-z0-9_-])"));
     def strip_ours: map(.hooks |= map(select(ours | not))) | map(select((.hooks | length) > 0));
     if (.hooks | type) == "object" then
       .hooks |= with_entries(if (.value | type) == "array" then .value |= strip_ours else . end)

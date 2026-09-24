@@ -94,6 +94,11 @@ if declare -F settings_merge >/dev/null; then
   # one script named after the package. A package bundling several hooks needs
   # each script's basename matched too, or a stale entry from whichever script
   # doesn't contain OWNS survives every reinstall instead of being replaced.
+  #
+  # Each name must stand as a whole word in the command, not merely appear in
+  # it. Two packages in one monorepo can share a prefix, and "mono-hook" sits
+  # inside ~/.claude/hooks/mono-hook2.sh: a plain substring match would strip
+  # the sibling's entry on every reinstall.
   owns_json=$(
     { [ -n "${OWNS:-}" ] && printf '%s\n' "$OWNS"
       for entry in ${FILES[@]+"${FILES[@]}"}; do basename "${entry#*:}"; done
@@ -101,7 +106,9 @@ if declare -F settings_merge >/dev/null; then
   )
   tmp=$(mktemp)
   jq --argjson owns "$owns_json" '
-    def ours: (.command // "") as $c | any($owns[]; . as $o | $c | contains($o));
+    def ours: (.command // "") as $c
+      | any($owns[]; gsub("[.]"; "\\.") as $o
+          | $c | test("(^|[^A-Za-z0-9_-])" + $o + "($|[^A-Za-z0-9_-])"));
     def strip_ours: map(.hooks |= map(select(ours | not))) | map(select((.hooks | length) > 0));
     if (.hooks | type) == "object" then
       .hooks |= with_entries(

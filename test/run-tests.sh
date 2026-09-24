@@ -195,6 +195,117 @@ VERSIONS_URL="file://$TMP/versions.txt" "$P/update.sh" --check >"$TMP/o" 2>&1 \
 "$NEW" --name mono-hook --kind hook --monorepo "$M" >/dev/null 2>&1 \
   && no "refuses a package that already exists" "overwrote it" || ok "refuses a package that already exists"
 
+echo "two packages in one monorepo"
+# The case the monorepo exists for: two hook packages installed side by side
+# into one settings.json, each stripping only its own entries.
+"$NEW" --name mono-hook2 --kind hook --monorepo "$M" >/dev/null 2>&1
+P2="$M/packages/mono-hook2"
+MC="$TMP/mono-claude"; mkdir -p "$MC"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"someone-elses-thing"}]}]}}\n' > "$MC/settings.json"
+CLAUDE_DIR="$MC" "$P/install.sh" --link --yes >"$TMP/o" 2>&1 \
+  && CLAUDE_DIR="$MC" "$P2/install.sh" --link --yes >>"$TMP/o" 2>&1 \
+  && ok "both install" || no "both install" "$(tail -4 "$TMP/o")"
+grep -q 'hooks/mono-hook.sh' "$MC/settings.json" && grep -q 'hooks/mono-hook2.sh' "$MC/settings.json" \
+  && grep -q 'someone-elses-thing' "$MC/settings.json" \
+  && ok "and both are registered, beside the other package" || no "and both are registered, beside the other package" "$(jq -c '.hooks' "$MC/settings.json")"
+# Reinstalling moves the package's entry to the end of its event's list, and
+# matching hooks run in parallel, so compare the set of entries, not the file.
+entries(){ jq -c '[.hooks | to_entries[] | .key as $e | .value[] | {e: $e, m: .matcher, c: .hooks[].command}] | sort' "$MC/settings.json"; }
+before=$(entries)
+CLAUDE_DIR="$MC" "$P/install.sh" --link --yes >/dev/null 2>&1
+[ "$before" = "$(entries)" ] \
+  && ok "reinstalling one leaves the other as it was" || no "reinstalling one leaves the other as it was" "$(entries)"
+CLAUDE_DIR="$MC" "$P/uninstall.sh" --yes >/dev/null 2>&1
+! grep -q 'hooks/mono-hook.sh' "$MC/settings.json" && grep -q 'hooks/mono-hook2.sh' "$MC/settings.json" \
+  && ok "uninstalling one leaves the other registered" || no "uninstalling one leaves the other registered" "$(jq -c '.hooks' "$MC/settings.json")"
+CLAUDE_DIR="$MC" "$P2/uninstall.sh" --yes >/dev/null 2>&1
+grep -q 'mono-hook' "$MC/settings.json" \
+  && no "uninstalling both leaves neither" "$(jq -c '.hooks' "$MC/settings.json")" || ok "uninstalling both leaves neither"
+
+# The root runner fails while any package's suite does, and names it. The
+# generated suites fail on their behaviour TODO, so they fail here as
+# scaffolded; with the TODO gone from all but one, only that one is named.
+"$M/test/run-tests.sh" >"$TMP/o" 2>&1 \
+  && no "the root runner fails when a package's suite does" "exited 0" \
+  || ok "the root runner fails when a package's suite does"
+for pkg in mono-hook mono-skill; do
+  sed -i '/^no "behaviour is tested"/d' "$M/packages/$pkg/test/run-tests.sh"
+done
+"$M/test/run-tests.sh" >"$TMP/o" 2>&1
+tail -1 "$TMP/o" | grep -q '3 packages, 1 failed: mono-hook2$' \
+  && ok "and names only the one that failed" || no "and names only the one that failed" "$(tail -1 "$TMP/o")"
+sed -i '/^no "behaviour is tested"/d' "$P2/test/run-tests.sh"
+"$M/test/run-tests.sh" >"$TMP/o" 2>&1 \
+  && ok "and passes once every suite does" || no "and passes once every suite does" "$(grep -E 'FAIL|packages,' "$TMP/o" | head -4)"
+
+echo "the monorepo release workflow"
+# The workflow's shell steps, lifted out of the YAML and run against a git copy
+# of the scaffolded monorepo pushing to a local bare remote. The GitHub
+# Release step needs GitHub and is left out; everything either side of it runs.
+WF="$M/.github/workflows/release.yml"
+grep -q "^      - '\*-v\[0-9\]\*'$" "$WF" \
+  && ok "triggers on <package>-vX.Y.Z tags" || no "triggers on <package>-vX.Y.Z tags" "$(grep -A2 'tags:' "$WF")"
+step_script(){ awk -v want="$1" '
+  /^      - / { name = ""; inrun = 0 }
+  /^      - name: / { name = substr($0, index($0, ": ") + 2); next }
+  name == want && /^        run: \|/ { inrun = 1; next }
+  inrun { if ($0 ~ /^          / || $0 == "") print substr($0, 11); else inrun = 0 }
+' "$WF"; }
+step_script "Work out the package and version from the tag" > "$TMP/wf-parse.sh"
+step_script "Build install tarball" > "$TMP/wf-build.sh"
+step_script "Record the version in versions.txt" | sed 's/sleep \$((attempt \* 5))/sleep 1/' > "$TMP/wf-versions.sh"
+[ -s "$TMP/wf-parse.sh" ] && [ -s "$TMP/wf-build.sh" ] && [ -s "$TMP/wf-versions.sh" ] \
+  && ok "its three shell steps are found" || no "its three shell steps are found" "an extracted step is empty"
+
+export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.invalid GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.invalid
+G="$TMP/wf-repo"; cp -r "$M" "$G"
+echo "working notes" > "$G/packages/mono-hook/BACKLOG.md"
+git init -q --bare "$TMP/wf-remote.git"
+( cd "$G" && git init -q && git add -A && git commit -qm init && git remote add origin "$TMP/wf-remote.git" && git push -q origin HEAD:refs/heads/main ) \
+  || no "the scratch repo is set up" "git failed"
+# Runs the parse step, then the build, then (for a stable tag) the versions
+# step, the way the job would, with GITHUB_ENV carrying values between them.
+release(){ (
+  cd "$G" && git tag "$1" && export TAG="$1" GITHUB_ENV="$TMP/wf-env" && : > "$GITHUB_ENV"
+  bash -e "$TMP/wf-parse.sh" || exit 1
+  set -a; . "$GITHUB_ENV"; set +a
+  bash -e "$TMP/wf-build.sh" || exit 2
+  [ -n "$PRERELEASE" ] || bash -e "$TMP/wf-versions.sh" || exit 3
+) >"$TMP/o" 2>&1; }
+listed(){ git --git-dir="$TMP/wf-remote.git" show versions:versions.txt 2>/dev/null; }
+
+release mono-hook-v0.1.0 && ok "a stable release runs every step" || no "a stable release runs every step" "$(tail -3 "$TMP/o")"
+tar -tzf "$G/mono-hook.tar.gz" > "$TMP/listing"
+grep -q '^mono-hook/install.sh$' "$TMP/listing" && grep -q '^mono-hook/hooks/mono-hook.sh$' "$TMP/listing" \
+  && ok "the tarball unpacks flat as mono-hook/" || no "the tarball unpacks flat as mono-hook/" "$(head -5 "$TMP/listing")"
+grep -q 'BACKLOG.md\|test/\|PAYLOAD' "$TMP/listing" \
+  && no "and carries only what PAYLOAD lists" "$(grep 'BACKLOG.md\|test/\|PAYLOAD' "$TMP/listing")" || ok "and carries only what PAYLOAD lists"
+mkdir -p "$TMP/wf-unpack" && tar -xzf "$G/mono-hook.tar.gz" -C "$TMP/wf-unpack"
+CLAUDE_DIR="$TMP/wf-claude" "$TMP/wf-unpack/mono-hook/install.sh" --yes >"$TMP/o" 2>&1 \
+  && ok "and installs with nothing else from the repo present" || no "and installs with nothing else from the repo present" "$(tail -4 "$TMP/o")"
+[ "$(listed)" = "mono-hook 0.1.0" ] \
+  && ok "versions.txt lists it" || no "versions.txt lists it" "$(listed)"
+release mono-hook2-v0.3.0 && [ "$(listed | tr '\n' ,)" = "mono-hook 0.1.0,mono-hook2 0.3.0," ] \
+  && ok "a second package adds its own line" || no "a second package adds its own line" "$(listed | tr '\n' ,)"
+release mono-hook-v0.2.0-rc1 && [ "$(listed | head -1)" = "mono-hook 0.1.0" ] \
+  && ok "a pre-release leaves versions.txt alone" || no "a pre-release leaves versions.txt alone" "$(listed | tr '\n' ,) $(tail -2 "$TMP/o")"
+release mono-hook-v0.2.0 && release mono-hook-v0.1.5 && [ "$(listed | head -1)" = "mono-hook 0.2.0" ] \
+  && ok "a lower version never replaces a higher one" || no "a lower version never replaces a higher one" "$(listed | tr '\n' ,)"
+release not-a-release && no "a tag not of the form <package>-vX.Y.Z fails" "accepted it" \
+  || ok "a tag not of the form <package>-vX.Y.Z fails"
+release no-such-package-v1.0.0 && no "a tag naming no package fails" "accepted it" \
+  || ok "a tag naming no package fails"
+# Three packages recording at once: two pushes are rejected as stale, re-read
+# the branch and try again, and every line lands.
+for n in 1 2 3; do git clone -q "$TMP/wf-remote.git" "$TMP/wf-clone$n" 2>/dev/null; done
+for n in 1 2 3; do
+  ( cd "$TMP/wf-clone$n" && PKG="racer-$n" VERSION="1.0.$n" bash -e "$TMP/wf-versions.sh" >/dev/null 2>&1 ) &
+done
+wait
+[ "$(listed | grep -c '^racer-')" -eq 3 ] \
+  && ok "three packages recorded at once all land" || no "three packages recorded at once all land" "$(listed | tr '\n' ,)"
+unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+
 echo "the generated package installs and works"
 export CLAUDE_DIR="$TMP/claude"; mkdir -p "$CLAUDE_DIR"
 printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"someone-elses-thing"}]}]}}\n' > "$CLAUDE_DIR/settings.json"
