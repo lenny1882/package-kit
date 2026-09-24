@@ -89,9 +89,19 @@ if declare -F settings_merge >/dev/null; then
 
   # Remove this package's previous entries across every event, then let the
   # manifest add the current ones. That is what makes re-running safe.
+  #
+  # A single OWNS substring only finds a package's own entries when it installs
+  # one script named after the package. A package bundling several hooks needs
+  # each script's basename matched too, or a stale entry from whichever script
+  # doesn't contain OWNS survives every reinstall instead of being replaced.
+  owns_json=$(
+    { [ -n "${OWNS:-}" ] && printf '%s\n' "$OWNS"
+      for entry in ${FILES[@]+"${FILES[@]}"}; do basename "${entry#*:}"; done
+    } | sort -u | jq -R . | jq -s .
+  )
   tmp=$(mktemp)
-  jq --arg owns "$OWNS" '
-    def ours: (.command // "") | contains($owns);
+  jq --argjson owns "$owns_json" '
+    def ours: (.command // "") as $c | any($owns[]; . as $o | $c | contains($o));
     def strip_ours: map(.hooks |= map(select(ours | not))) | map(select((.hooks | length) > 0));
     if (.hooks | type) == "object" then
       .hooks |= with_entries(
