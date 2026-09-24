@@ -75,6 +75,24 @@ branch never moved, and the tag ended up on `main` — the one thing the branch
 rule exists to prevent. Run those commands one at a time and read the output of
 each.
 
+## In a monorepo
+
+A package in a monorepo is released the same way, with the names changed: tags
+are `<package>-vX.Y.Z`, branches `release/<package>-vX.x`, and `/release
+<package>` at the repo root does it. Three things differ, all because one repo
+now holds several release streams:
+
+- **`/releases/latest` is not used.** It returns whichever package released
+  last. The workflow instead records each stable release in `versions.txt` on
+  the `versions` branch, after the tarball is uploaded, and installs and
+  `update.sh` read that.
+- **The pre-release rule looks after the version.** Every monorepo tag contains
+  hyphens, so only one after `vX.Y.Z` makes a pre-release.
+- **The payload list is `packages/<package>/PAYLOAD`**, not a line in the
+  workflow, because one workflow serves every package.
+
+The branch rule is unchanged. See `reference/monorepo.md`.
+
 ## Versioning
 
 `VERSION` is the only source of truth — the installer reads it, `update.sh`

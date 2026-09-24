@@ -55,6 +55,15 @@ That creates the directory with the machinery filled in and three things left
 marked: the source file, `manifest.sh`, and the behaviour tests. The generated
 test suite fails on a deliberate TODO until real tests are written.
 
+For a repo holding several packages that are each released on their own,
+scaffold the root once and then add each package to it:
+
+    ~/.claude/skills/claude-package-kit/bin/new-monorepo.sh --name my-hooks [--dir <where>] [--slug <owner/repo>]
+    ~/.claude/skills/claude-package-kit/bin/new-package.sh --name my-thing --kind hook --monorepo my-hooks
+
+See `skill/reference/monorepo.md` for the layout, and for when one repo per
+package is the better answer.
+
 ## What a generated package gets
 
 ```
@@ -101,6 +110,9 @@ having as more than a template:
   a hook can hand work to the running session.
 - `reference/release.md` — publishing, and the rule that a release tag is only
   ever created on its `release/vX.x` branch after `main` is merged in.
+- `reference/monorepo.md` — several independently released packages in one
+  repo: per-package tags and branches, and `versions.txt` in place of
+  `/releases/latest`.
 
 ## Tests
 
@@ -109,8 +121,9 @@ having as more than a template:
 Scaffolds one package of each kind, checks no placeholder survives, then
 installs, re-installs, dry-runs and uninstalls the generated hook package
 against a throwaway config — including that it leaves another package's hooks
-alone. It then does the same to this repo itself, so the kit is held to the
-layout it hands out.
+alone. It scaffolds a monorepo root and a package inside it, and checks the
+package finds its version in `versions.txt`. It then does the same to this repo
+itself, so the kit is held to the layout it hands out.
 
 ## Releasing
 

@@ -47,6 +47,12 @@ Decide with the user, not for them:
   directory the published packages sit in — the parent of this repo's own
   checkout. Both use the same layout, so this can be changed later by moving
   the directory.
+- **A repo of its own, or a package in a monorepo.** A monorepo holds several
+  packages that are each versioned, released and installed on their own — a
+  hooks repo, say. If one already exists that this belongs in, it goes there;
+  otherwise it gets a repo of its own. Read `reference/monorepo.md` before
+  starting a new monorepo. Moving a published package between the two later
+  changes its tags and install URL, so settle this now.
 
 ## 2. Scaffold it
 
@@ -57,6 +63,15 @@ Decide with the user, not for them:
 
 Add `--no-release` for something that will never be published — it leaves out
 `update.sh`, the update check, the release workflow and the release skill.
+
+For a package in a monorepo, pass `--monorepo <repo-root>` instead of `--dir`.
+It goes in `<repo-root>/packages/<name>`, and the root keeps the release
+workflow and skill. A new monorepo's root comes first:
+
+```bash
+"$HOME/.claude/skills/claude-package-kit/bin/new-monorepo.sh" \
+  --name <kebab-case-repo-name> [--dir <where>] [--slug <owner/repo>]
+```
 
 Do not assemble these files by hand. The installer machinery is subtle in ways
 that are invisible when it goes wrong: a settings merge that drops another
@@ -102,10 +117,11 @@ Only when asked. `git init`, creating a GitHub repo, pushing, and cutting a
 release are all outward-facing — each needs the user's agreement in the moment,
 and agreeing to one is not agreeing to the next. The process is in
 `reference/release.md`, and every published package carries its own `/release`
-skill.
+skill — or, in a monorepo, the root carries one that takes the package name.
 
 ## Reference
 
 - `reference/layout.md` — the file layout and what each installer must do
 - `reference/hook-events.md` — what hooks can actually do, most of it undocumented
 - `reference/release.md` — publishing and cutting releases
+- `reference/monorepo.md` — several independently released packages in one repo

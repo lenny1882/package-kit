@@ -20,8 +20,14 @@ everything else.
 ```
 
 `update.sh` and `lib/update-check.sh` are the same in every package bar the
-name — they are copied by the scaffolder, not rewritten. `manifest.sh` is where
-a package differs.
+name and the release lookup — they are copied by the scaffolder, not rewritten.
+The lookup is inserted from `template/lookup/`: `/releases/latest` for a package
+with a repo to itself, `versions.txt` for one in a monorepo. `manifest.sh` is
+where a package differs.
+
+A package in a monorepo has the same layout under `<repo>/packages/<name>/`,
+less `.github/`, `.claude/` and `.gitignore`, which the root owns, and plus
+`PAYLOAD`, the list of what its tarball carries. See `reference/monorepo.md`.
 
 ## What every installer must do
 
@@ -30,9 +36,9 @@ These are not stylistic. Each one exists because of something that went wrong.
 - **Honour `CLAUDE_DIR`**, defaulting to `~/.claude`, so the tests can run
   against a throwaway directory instead of the real config.
 - **Merge into `settings.json`, never replace it**, and back it up first. The
-  merge strips only this package's own entries — found by a substring of its
-  name in the command — and leaves every other package's alone. There is a test
-  for this in the generated suite; keep it.
+  merge strips only this package's own entries — found by its name, or the
+  name of any script it installs, in the command — and leaves every other
+  package's alone. There is a test for this in the generated suite; keep it.
 - **Be safe to run twice.** Re-running is how a package upgrades. Installing
   twice must leave `settings.json` byte-identical, which means removing your own
   entries before adding them rather than appending.
