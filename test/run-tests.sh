@@ -149,6 +149,52 @@ grep -q -- '--monorepo' "$TMP/o" \
 grep -q 'someone/elsewhere' "$TMP/test-mono-slug/README.md" \
   && ok "--slug reaches the README" || no "--slug reaches the README" "not there"
 
+echo "a package inside a monorepo"
+"$NEW" --name mono-hook --kind hook --monorepo "$M" >"$TMP/o" 2>&1 \
+  && ok "scaffolds into packages/" || no "scaffolds into packages/" "$(tail -3 "$TMP/o")"
+P="$M/packages/mono-hook"
+missing=""
+for f in install.sh uninstall.sh update.sh lib/update-check.sh manifest.sh VERSION README.md PAYLOAD test/run-tests.sh hooks/mono-hook.sh; do
+  [ -f "$P/$f" ] || missing="$missing $f"
+done
+[ -z "$missing" ] && ok "carries every package file" || no "carries every package file" "missing:$missing"
+[ ! -e "$P/.github" ] && [ ! -e "$P/.claude" ] && [ ! -e "$P/.gitignore" ] \
+  && ok "leaves .github, .claude and .gitignore to the root" || no "leaves .github, .claude and .gitignore to the root" "$(ls -A "$P")"
+grep -q 'GITHUB_SLUG="lenny1882/test-mono"' "$P/update.sh" \
+  && ok "takes the slug from the root" || no "takes the slug from the root" "$(grep GITHUB_SLUG "$P/update.sh")"
+for f in update.sh lib/update-check.sh; do
+  bash -n "$P/$f" && ok "$f parses" || no "$f parses" "syntax error"
+  grep -q 'versions/versions.txt' "$P/$f" && ! grep -q 'api.github.com' "$P/$f" \
+    && ok "$f reads versions.txt only" || no "$f reads versions.txt only" "$(grep -n 'versions.txt\|api.github.com' "$P/$f")"
+done
+[ "$(cat "$P/PAYLOAD")" = "hooks lib manifest.sh install.sh uninstall.sh update.sh VERSION README.md" ] \
+  && ok "PAYLOAD lists what a hook tarball carries" || no "PAYLOAD lists what a hook tarball carries" "$(cat "$P/PAYLOAD")"
+grep -q 'packages/mono-hook/' "$M/README.md" \
+  && ok "adds its row to the root README" || no "adds its row to the root README" "no row"
+grep -q 'versions/versions.txt' "$P/README.md" && ! grep -q 'releases/latest' "$P/README.md" \
+  && ok "its README installs through versions.txt" || no "its README installs through versions.txt" "$(grep -n 'versions.txt\|releases/latest' "$P/README.md")"
+grep -rq '__[A-Z]*__' "$P" \
+  && no "no placeholder left unfilled" "$(grep -rn '__[A-Z]*__' "$P" | head -3)" || ok "no placeholder left unfilled"
+# update.sh against a local versions.txt: its own line counts, a sibling's does not.
+printf 'another-pkg 9.0.0\nmono-hook 0.2.0\n' > "$TMP/versions.txt"
+VERSIONS_URL="file://$TMP/versions.txt" "$P/update.sh" --check >"$TMP/o" 2>&1
+grep -q "v0.2.0 is available" "$TMP/o" && grep -q 'releases/tag/mono-hook-v0.2.0' "$TMP/o" \
+  && ok "update.sh finds its own line in versions.txt" || no "update.sh finds its own line in versions.txt" "$(tail -3 "$TMP/o")"
+printf 'another-pkg 9.0.0\n' > "$TMP/versions.txt"
+VERSIONS_URL="file://$TMP/versions.txt" "$P/update.sh" --check >"$TMP/o" 2>&1 \
+  && no "update.sh stops when versions.txt has no line for it" "exited 0" \
+  || { grep -q "lists no release of mono-hook" "$TMP/o" && ok "update.sh stops when versions.txt has no line for it" \
+       || no "update.sh stops when versions.txt has no line for it" "$(tail -2 "$TMP/o")"; }
+"$NEW" --name mono-skill --kind skill --monorepo "$M" --no-release >/dev/null 2>&1
+[ ! -e "$M/packages/mono-skill/PAYLOAD" ] && [ ! -e "$M/packages/mono-skill/update.sh" ] \
+  && ok "--no-release leaves out PAYLOAD and the update machinery" || no "--no-release leaves out PAYLOAD and the update machinery" "present"
+"$NEW" --name mono-x --kind hook --monorepo "$M" --dir "$TMP" >/dev/null 2>&1 \
+  && no "refuses --dir with --monorepo" "accepted it" || ok "refuses --dir with --monorepo"
+"$NEW" --name mono-x --kind hook --monorepo "$TMP/test-hook" >/dev/null 2>&1 \
+  && no "refuses a root that is not a monorepo" "accepted it" || ok "refuses a root that is not a monorepo"
+"$NEW" --name mono-hook --kind hook --monorepo "$M" >/dev/null 2>&1 \
+  && no "refuses a package that already exists" "overwrote it" || ok "refuses a package that already exists"
+
 echo "the generated package installs and works"
 export CLAUDE_DIR="$TMP/claude"; mkdir -p "$CLAUDE_DIR"
 printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"someone-elses-thing"}]}]}}\n' > "$CLAUDE_DIR/settings.json"
