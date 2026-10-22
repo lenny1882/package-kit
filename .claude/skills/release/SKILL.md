@@ -75,8 +75,8 @@ output of each; don't chain them or pipe them through anything that hides it.
 
 - `git tag -a vX.Y.Z release/vX.x -m "claude-package-kit vX.Y.Z"` — annotated,
   and naming the branch explicitly so the tag can't attach to whatever happens
-  to be checked out. Match the message convention of the existing tags; this
-  repo has none yet, so the first one sets it.
+  to be checked out. Match the message convention of the existing tags; a repo
+  with none yet has its convention set by the first one.
 - Verify with `git branch --contains vX.Y.Z`; it must list `release/vX.x`.
 - Confirm, then `git push origin vX.Y.Z`. This is the step that fires the
   release workflow.

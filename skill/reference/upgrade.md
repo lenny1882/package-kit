@@ -130,6 +130,8 @@ upgrade would write older files over newer ones. It refuses unless
 ## The kit itself
 
 The kit is a skill package and carries its own `.kit/`. Its test suite runs
-`upgrade-package.sh` against the kit's own checkout and fails if anything
-other than "up to date" comes back, so the kit's installer cannot drift from
-the template it ships.
+`upgrade-package.sh` against the kit's own checkout and fails if anything is
+left to write, or if any file comes back "up to date (hand edits kept)", so the
+kit's installer cannot drift from the template it ships. The one file allowed
+hand edits is the kit's `/release` skill, adopted with `--adopt`: it says the
+version is written to `skill/VERSION`, which no other package does.

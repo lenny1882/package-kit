@@ -539,6 +539,17 @@ grep -q "stale  *test/run-tests.sh" "$TMP/o" \
 "$UP" --root "$P" >"$TMP/o" 2>&1 \
   && no "--root refuses a package" "accepted" || ok "--root refuses a package"
 
+echo "the kit is up to date with itself"
+# The kit is a skill package carrying its own .kit/. Its install.sh and the
+# rest must be what its own template generates, or they have drifted.
+"$UP" "$REPO" >"$TMP/o" 2>&1 && grep -q "0 to write, 0 left for you" "$TMP/o" \
+  && ok "upgrade-package.sh finds nothing to do on the kit" || no "upgrade-package.sh finds nothing to do on the kit" "$(grep -v 'up to date' "$TMP/o" | head -12)"
+# "Hand edits kept" is up to date for a package, but for the kit it is drift.
+# The release skill is the one exception: it says where the kit's VERSION lives.
+drift=$(grep "(hand edits kept)" "$TMP/o" | grep -v "\.claude/skills/release/SKILL\.md" || true)
+[ -z "$drift" ] && ok "and none of the kit's own files differs from its template" \
+  || no "and none of the kit's own files differs from its template" "$drift"
+
 echo "the generated tests fail until behaviour is tested"
 "$TMP/test-hook/test/run-tests.sh" >"$TMP/o" 2>&1
 grep -q "no behaviour tests written yet" "$TMP/o" \
@@ -558,6 +569,11 @@ grep -q 'TARBALL_NAME="claude-package-kit.tar.gz"' "$REPO/update.sh" \
   && ok "update.sh looks for the right tarball" || no "update.sh looks for the right tarball" "$(grep TARBALL_NAME "$REPO/update.sh")"
 grep -q -- '-- skill lib manifest.sh' "$REPO/.github/workflows/release.yml" \
   && ok "its own tarball payload matches its kind" || no "its own tarball payload matches its kind" "$(grep 'TAG" --' "$REPO/.github/workflows/release.yml")"
+
+echo "the kit's own installer tests"
+# The installer-tests.sh every package gets, run against the kit itself.
+export CLAUDE_DIR="$TMP/self-installer"; mkdir -p "$CLAUDE_DIR"
+. "$REPO/test/installer-tests.sh"
 
 echo "the kit installs itself"
 export CLAUDE_DIR="$TMP/self"; mkdir -p "$CLAUDE_DIR"

@@ -1,0 +1,7 @@
+kit=1.1.0
+name=claude-package-kit
+kind=skill
+slug=lenny1882/package-kit
+monorepo=0
+release=1
+payload=skill lib
