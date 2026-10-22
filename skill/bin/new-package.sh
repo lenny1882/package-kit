@@ -58,6 +58,19 @@ case "$NAME" in
 hook whose command contains that, and the registration vanishes between
 sessions with no error. Pick another name." ;;
 esac
+# A hook or command package keeps its state in ~/.claude/<name>/, and
+# uninstall.sh removes that directory. These names are already directories
+# there, belonging to Claude Code or another tool. uninstall.sh carries the same
+# list.
+case " agents auth-recipes backups bin bridge-spawn cache commands daemon debug
+  dev-mods downloads feedback file-history hooks ide jobs local logs memory
+  output-styles paste-cache plugins projects reference rules routines seed-admin
+  session-colors session-env sessions shares shell-snapshots skills state
+  statsig statusline-state todos uploads workflows " in
+  *[[:space:]]"$NAME"[[:space:]]*) die "'$NAME' is already a directory under ~/.claude, belonging to Claude
+Code or another tool. A package's state lives in ~/.claude/<name>/, and
+uninstalling it would delete that directory. Pick another name." ;;
+esac
 [ -f "$TEMPLATE/manifest.$KIND.sh" ] || die "--kind must be hook, skill or command"
 
 if [ -n "$MONO" ]; then

@@ -48,6 +48,7 @@ tarball as well as a clone — no git needed.
 
     ./uninstall.sh                 ask before editing settings.json
     ./uninstall.sh --keep-settings leave settings.json alone
+    ./uninstall.sh --keep-state    keep the package's state for a later reinstall
 
 ## How it works
 

@@ -398,6 +398,48 @@ git -C "$TMP/gi" check-ignore -q --no-index packages/mono-skill/skill/state/conf
 git -C "$TMP/gi" check-ignore -q --no-index hooks/state/config \
   && no "and nothing else named state/" "hooks/state/ is ignored too" || ok "and nothing else named state/"
 
+echo "uninstall and state"
+# uninstall.sh removes a package's state unless --keep-state: state/ inside a
+# skill's directory, and ~/.claude/<name>/ for a hook or command package.
+"$S/install.sh" --yes >/dev/null 2>&1
+mkdir -p "$SD/state"; echo kept > "$SD/state/config"
+"$S/uninstall.sh" --yes --keep-state >/dev/null 2>&1
+[ "$(cat "$SD/state/config" 2>/dev/null)" = kept ] && [ ! -e "$SD/SKILL.md" ] \
+  && ok "--keep-state: a skill's state/ stays where the next install looks" \
+  || no "--keep-state: a skill's state/ stays where the next install looks" "$(ls -A "$SD" 2>&1)"
+"$S/install.sh" --yes >/dev/null 2>&1
+[ "$(cat "$SD/state/config" 2>/dev/null)" = kept ] && [ -f "$SD/SKILL.md" ] \
+  && ok "and a reinstall picks it up" || no "and a reinstall picks it up" "$(ls -A "$SD" 2>&1)"
+"$S/uninstall.sh" --yes >/dev/null 2>&1
+[ ! -e "$SD" ] && ok "without it, state/ goes too" || no "without it, state/ goes too" "$(ls -A "$SD")"
+"$S/install.sh" --link --yes >/dev/null 2>&1
+"$S/uninstall.sh" --yes >/dev/null 2>&1
+[ ! -e "$SD" ] && [ -f "$S/skill/state/config" ] \
+  && ok "--link: uninstall leaves the checkout's state/ alone" || no "--link: uninstall leaves the checkout's state/ alone" "$(ls -A "$S/skill")"
+H="$TMP/test-hook"
+"$H/install.sh" --yes >/dev/null 2>&1
+mkdir -p "$CLAUDE_DIR/test-hook"; echo kept > "$CLAUDE_DIR/test-hook/log"
+"$H/uninstall.sh" --yes --keep-state >/dev/null 2>&1
+[ -f "$CLAUDE_DIR/test-hook/log" ] \
+  && ok "--keep-state: a hook's ~/.claude/<name>/ stays" || no "--keep-state: a hook's ~/.claude/<name>/ stays" "removed"
+"$H/install.sh" --yes >/dev/null 2>&1
+"$H/uninstall.sh" --yes >/dev/null 2>&1
+[ ! -e "$CLAUDE_DIR/test-hook" ] \
+  && ok "without it, ~/.claude/<name>/ goes" || no "without it, ~/.claude/<name>/ goes" "still there"
+"$NEW" --name skills --kind hook --dir "$TMP" >"$TMP/o" 2>&1 \
+  && no "the scaffolder refuses a name already under ~/.claude" "accepted 'skills'" \
+  || { grep -q "already a directory under ~/.claude" "$TMP/o" \
+         && ok "the scaffolder refuses a name already under ~/.claude" \
+         || no "the scaffolder refuses a name already under ~/.claude" "$(cat "$TMP/o")"; }
+# A package named before the scaffolder refused such names: rename test-bare's
+# manifest to 'skills' and check uninstall leaves Claude Code's directory alone.
+mkdir -p "$CLAUDE_DIR/skills/someone-else"
+sed -i 's/^PKG=.*/PKG="skills"/' "$TMP/test-bare/manifest.sh"
+"$TMP/test-bare/uninstall.sh" --yes --keep-settings >"$TMP/o" 2>&1
+[ -d "$CLAUDE_DIR/skills/someone-else" ] && grep -q "not removing" "$TMP/o" \
+  && ok "uninstall will not delete ~/.claude/skills for a package named skills" \
+  || no "uninstall will not delete ~/.claude/skills for a package named skills" "$(tail -3 "$TMP/o")"
+
 echo "the generated tests fail until behaviour is tested"
 "$TMP/test-hook/test/run-tests.sh" >"$TMP/o" 2>&1
 grep -q "no behaviour tests written yet" "$TMP/o" \

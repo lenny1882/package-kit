@@ -10,7 +10,7 @@ everything else.
   VERSION                          bare X.Y.Z, one line
   manifest.sh                      what gets installed and registered
   install.sh                       --link --yes --dry-run
-  uninstall.sh                     --yes --keep-settings
+  uninstall.sh                     --yes --keep-settings --keep-state
   update.sh                        newest GitHub Release, no git needed
   lib/update-check.sh              the once-a-day update notice
   hooks/ | skill/ | bin/           the thing itself
@@ -65,6 +65,17 @@ after every install and every upgrade. `place()` sets `state/` aside before that
 and puts it back after, in copy and `--link` mode alike. With `--link` the
 installed directory is a symlink to `skill/` in the checkout, so `state/` lives
 in the checkout; `.gitignore` ignores `**/skill/state/` so it never lands in git.
+
+`uninstall.sh` removes both kinds of state unless given `--keep-state`. With it,
+a skill's `state/` is put back at `~/.claude/skills/<name>/state/`, where the
+next install finds it, and `~/.claude/<name>/` is left alone. A `--link`
+install's `state/` is in the checkout, and `uninstall.sh` never deletes from a
+checkout.
+
+Since `uninstall.sh` removes `~/.claude/<name>/`, a package must not be named
+after a directory already there — `skills`, `hooks`, `projects` and the rest.
+`new-package.sh` refuses those names and `uninstall.sh` will not delete them;
+the two scripts carry the same list.
 
 `~/.local/share/<name>/` is not state. It holds the installed copy of
 `update-check.sh`, which `install.sh` replaces every time.

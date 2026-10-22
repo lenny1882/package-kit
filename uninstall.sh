@@ -4,6 +4,7 @@
 #   ./uninstall.sh                 ask before editing settings.json
 #   ./uninstall.sh --yes           no prompts
 #   ./uninstall.sh --keep-settings leave settings.json alone
+#   ./uninstall.sh --keep-state    keep the package's state for a later reinstall
 
 set -euo pipefail
 
@@ -13,12 +14,13 @@ SETTINGS="$CLAUDE_DIR/settings.json"
 LIB_DIR="$HOME/.local/share/claude-package-kit"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/claude-package-kit"
 
-ASSUME_YES=0; KEEP_SETTINGS=0
+ASSUME_YES=0; KEEP_SETTINGS=0; KEEP_STATE=0
 for a in "$@"; do
   case "$a" in
     --yes|-y)        ASSUME_YES=1 ;;
     --keep-settings) KEEP_SETTINGS=1 ;;
-    -h|--help) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --keep-state)    KEEP_STATE=1 ;;
+    -h|--help) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
 done
@@ -36,13 +38,44 @@ FILES=(); DIRS=(); STATE_DIRS=()
 # shellcheck source=manifest.sh
 . "$REPO/manifest.sh"
 
+# A package's state: state/ inside a skill's installed directory, and
+# $CLAUDE_DIR/$PKG for a hook or command package, which has no directory of its
+# own. Both go unless --keep-state. With --link the skill's directory is a
+# symlink, so removing it leaves state/ in the checkout, where git ignores it.
+PKG_STATE="$CLAUDE_DIR/$PKG"
+
+# Claude Code's own directories, and other tools', under ~/.claude. A package
+# with one of these names would have its state at that path, and removing it
+# would take their data with it. new-package.sh refuses these names; this is
+# the backstop for a package named before it did.
+RESERVED=" agents auth-recipes backups bin bridge-spawn cache commands daemon
+  debug dev-mods downloads feedback file-history hooks ide jobs local logs
+  memory output-styles paste-cache plugins projects reference rules routines
+  seed-admin session-colors session-env sessions shares shell-snapshots skills
+  state statsig statusline-state todos uploads workflows "
+
 printf '%s\n' "== Uninstalling $PKG"
 
 step "Removing files"
 for entry in ${FILES[@]+"${FILES[@]}"} ${DIRS[@]+"${DIRS[@]}"}; do
-  d="${entry#*:}"
+  d="${entry#*:}" keep=""
+  if [ "$KEEP_STATE" -eq 1 ] && [ -d "$d/state" ] && [ ! -L "$d" ]; then
+    keep=$(mktemp -d "$(dirname "$d")/.$(basename "$d").state.XXXXXX")
+    mv "$d/state" "$keep/state"
+  fi
   if [ -e "$d" ] || [ -L "$d" ]; then rm -rf "$d"; ok "removed $d"; else ok "no $d"; fi
+  if [ -n "$keep" ]; then
+    mkdir -p "$d"; mv "$keep/state" "$d/state"; rmdir "$keep"
+    ok "kept $d/state (--keep-state)"
+  fi
 done
+case "$(printf '%s' "$RESERVED" | tr -s ' \n' ' ')" in
+  *" $PKG "*) warn "not removing $PKG_STATE: that name belongs to Claude Code or another tool" ;;
+  *) if [ -d "$PKG_STATE" ]; then
+       if [ "$KEEP_STATE" -eq 1 ]; then ok "kept $PKG_STATE (--keep-state)"
+       else rm -rf "$PKG_STATE"; ok "removed $PKG_STATE"; fi
+     fi ;;
+esac
 for d in "$LIB_DIR" "$STATE" ${STATE_DIRS[@]+"${STATE_DIRS[@]}"}; do
   [ -d "$d" ] && { rm -rf "$d"; ok "removed $d"; }
 done

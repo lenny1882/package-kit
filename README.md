@@ -71,7 +71,7 @@ my-thing/
   README.md  VERSION  .gitignore
   manifest.sh                      what gets installed and registered
   install.sh                       --link --yes --dry-run, safe to re-run
-  uninstall.sh                     --yes --keep-settings
+  uninstall.sh                     --yes --keep-settings --keep-state
   update.sh                        newest GitHub Release, no git needed
   lib/update-check.sh              once-a-day update notice
   hooks/ | skill/ | bin/           the thing itself
