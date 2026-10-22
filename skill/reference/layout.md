@@ -50,6 +50,25 @@ These are not stylistic. Each one exists because of something that went wrong.
 - **Say what to do next.** `/hooks` forces a settings reload in a running
   session; a newly added hook needs a restart.
 
+## Where a package keeps its state
+
+Config, per-item files, logs — anything the package writes while it runs.
+
+- **A skill** keeps it in `state/` inside its installed directory:
+  `~/.claude/skills/<name>/state/`.
+- **A hook or command package** has no installed directory of its own, so it
+  uses `~/.claude/<name>/`. `handoff-gate` and `inventory-guard` do this.
+
+The reason is `place()` in `install.sh`. It runs `rm -rf` on the destination and
+copies or links it again, so anything else inside a skill's directory is gone
+after every install and every upgrade. `place()` sets `state/` aside before that
+and puts it back after, in copy and `--link` mode alike. With `--link` the
+installed directory is a symlink to `skill/` in the checkout, so `state/` lives
+in the checkout; `.gitignore` ignores `**/skill/state/` so it never lands in git.
+
+`~/.local/share/<name>/` is not state. It holds the installed copy of
+`update-check.sh`, which `install.sh` replaces every time.
+
 ## Registering a hook
 
 Two mistakes cost a working guard, both of them silent.

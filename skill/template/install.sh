@@ -59,13 +59,27 @@ case "$PKG" in
           warn "Rename it." ;;
 esac
 
+# A skill keeps its state in state/ inside its installed directory. The rm -rf
+# below would delete it on every install and upgrade, so it is set aside first
+# and put back after. With --link the directory is the checkout's and state/
+# already lives there, ignored by git, so a reinstall over the same link leaves
+# it alone.
 place() { # place <source> <destination>
-  local src="$REPO/$1" dst="$2"
+  local src="$REPO/$1" dst="$2" keep=""
   [ -e "$src" ] || { warn "missing $src"; return 1; }
   mkdir -p "$(dirname "$dst")"
+  if [ -d "$dst/state" ] && [ "$(cd "$dst/state" && pwd -P)" != "$(cd "$src" && pwd -P)/state" ]; then
+    keep=$(mktemp -d "$(dirname "$dst")/.$(basename "$dst").state.XXXXXX")
+    if [ -L "$dst" ]; then cp -a "$dst/state" "$keep/state"; else mv "$dst/state" "$keep/state"; fi
+  fi
   rm -rf "$dst"
   if [ "$LINK" -eq 1 ]; then ln -s "$src" "$dst"; else cp -r "$src" "$dst"; fi
-  ok "$dst"
+  if [ -n "$keep" ]; then
+    rm -rf "$dst/state"; mv "$keep/state" "$dst/state"; rmdir "$keep"
+    ok "$dst (state/ kept)"
+  else
+    ok "$dst"
+  fi
 }
 
 if [ "$DRY" -eq 0 ]; then

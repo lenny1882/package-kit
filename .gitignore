@@ -1,3 +1,8 @@
+# A skill's state, kept in its installed directory. With install.sh --link that
+# directory is skill/ in this checkout. The pattern matches at any depth, so it
+# covers packages/<name>/skill/state/ in a monorepo too.
+**/skill/state/
+
 # Editor and OS noise
 *.bak
 *.bak-*

@@ -359,6 +359,45 @@ grep -q "second-check.sh" "$CLAUDE_DIR/settings.json" \
 grep -q "someone-elses-thing" "$CLAUDE_DIR/settings.json" \
   && ok "and spares other packages" || no "and spares other packages" "removed them"
 
+echo "a skill's state/ survives install and upgrade"
+# place() runs rm -rf on the installed directory before copying or linking it
+# again, so anything a skill writes beside its own files must be set aside
+# first. repo-remote-control keeps per-repo config and server logs there.
+S="$TMP/test-skill"; SD="$CLAUDE_DIR/skills/test-skill"
+"$S/install.sh" --yes >/dev/null 2>&1
+mkdir -p "$SD/state"; echo kept > "$SD/state/config"
+"$S/install.sh" --yes >"$TMP/o" 2>&1
+[ "$(cat "$SD/state/config" 2>/dev/null)" = kept ] \
+  && ok "copy: a reinstall keeps it" || no "copy: a reinstall keeps it" "$(tail -4 "$TMP/o")"
+grep -q "state/ kept" "$TMP/o" && ok "and says so" || no "and says so" "$(grep "$SD" "$TMP/o")"
+echo 0.2.0 > "$S/VERSION"; echo "upgraded" >> "$S/skill/SKILL.md"
+"$S/install.sh" --yes >/dev/null 2>&1
+[ "$(cat "$SD/state/config" 2>/dev/null)" = kept ] && grep -q upgraded "$SD/SKILL.md" \
+  && ok "copy: an upgrade keeps it and installs the new files" || no "copy: an upgrade keeps it and installs the new files" "$(ls -A "$SD")"
+ls -A "$CLAUDE_DIR/skills" | grep -q '\.state\.' \
+  && no "nothing is left beside the skill" "$(ls -A "$CLAUDE_DIR/skills")" || ok "nothing is left beside the skill"
+"$S/install.sh" --link --yes >/dev/null 2>&1
+[ -L "$SD" ] && [ "$(cat "$S/skill/state/config" 2>/dev/null)" = kept ] \
+  && ok "copy to --link: it moves into the checkout" || no "copy to --link: it moves into the checkout" "$(ls -A "$S/skill")"
+echo "more" >> "$S/skill/SKILL.md"
+"$S/install.sh" --link --yes >/dev/null 2>&1
+[ "$(cat "$SD/state/config" 2>/dev/null)" = kept ] && grep -q more "$SD/SKILL.md" \
+  && ok "--link: a reinstall and an upgrade keep it" || no "--link: a reinstall and an upgrade keep it" "$(ls -A "$S/skill")"
+"$S/install.sh" --yes >/dev/null 2>&1
+[ ! -L "$SD" ] && [ "$(cat "$SD/state/config" 2>/dev/null)" = kept ] && [ -f "$S/skill/state/config" ] \
+  && ok "--link to copy: it comes along, and the checkout keeps its own" \
+  || no "--link to copy: it comes along, and the checkout keeps its own" "$(ls -A "$SD" "$S/skill" 2>&1)"
+"$S/uninstall.sh" --yes >/dev/null 2>&1
+mkdir -p "$TMP/gi" && git -C "$TMP/gi" init -q
+cp "$S/.gitignore" "$TMP/gi/.gitignore"
+git -C "$TMP/gi" check-ignore -q --no-index skill/state/config \
+  && ok "a package's .gitignore ignores it" || no "a package's .gitignore ignores it" "skill/state/config is not ignored"
+cp "$M/.gitignore" "$TMP/gi/.gitignore"
+git -C "$TMP/gi" check-ignore -q --no-index packages/mono-skill/skill/state/config \
+  && ok "a monorepo's .gitignore ignores it in every package" || no "a monorepo's .gitignore ignores it in every package" "not ignored"
+git -C "$TMP/gi" check-ignore -q --no-index hooks/state/config \
+  && no "and nothing else named state/" "hooks/state/ is ignored too" || ok "and nothing else named state/"
+
 echo "the generated tests fail until behaviour is tested"
 "$TMP/test-hook/test/run-tests.sh" >"$TMP/o" 2>&1
 grep -q "no behaviour tests written yet" "$TMP/o" \
