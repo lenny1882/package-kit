@@ -1,6 +1,6 @@
 ---
 name: claude-package-kit
-description: Build and package a Claude Code customisation — a hook, skill, slash command, or CLI tool — following this machine's house layout, with an installer, tests, update path and release process. Use when the user asks for something to be built that will be installed into ~/.claude or ~/.local/bin, or asks to package something that already exists there.
+description: Build and package a Claude Code customisation — a hook, skill, slash command, or CLI tool — following this machine's house layout, with an installer, tests, update path and release process. Use when the user asks for something to be built that will be installed into ~/.claude or ~/.local/bin, or asks to package something that already exists there, or to upgrade a package or monorepo made by an older version of this kit.
 allowed-tools:
   - Bash
   - Read
@@ -91,6 +91,22 @@ It reports which of the kit's files — `install.sh`, `uninstall.sh`, the update
 check, the release workflow — are behind this kit, and shows the diffs. Show the
 user what it found and ask before running it with `--apply`. For a monorepo
 root, use `--root <repo-root>`. `reference/upgrade.md` explains each status.
+
+**A whole monorepo** is the root and then each directory under `packages/`. Run
+every dry run before applying any, and show the user one summary: per target,
+the files to write and the files left for them. Ask once for the whole set, not
+once per file.
+
+**A file reported hand-edited** has no record of what was generated, because the
+package predates `.kit/`. Read its diff before proposing anything:
+
+- Every hunk is a change the kit made — it matches the template, or the same
+  file shows the same diff in a sibling package — so there is nothing local to
+  lose. Propose `--force <file>`.
+- Some hunk is a local change. Propose `--adopt <file>`, but say what it costs:
+  `--adopt` records the current kit's version as the file's origin, so the
+  kit's changes missing from it are never merged in afterwards. Carry them into
+  the file by hand first.
 
 ## 3. Write it
 
