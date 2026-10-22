@@ -440,6 +440,26 @@ sed -i 's/^PKG=.*/PKG="skills"/' "$TMP/test-bare/manifest.sh"
   && ok "uninstall will not delete ~/.claude/skills for a package named skills" \
   || no "uninstall will not delete ~/.claude/skills for a package named skills" "$(tail -3 "$TMP/o")"
 
+echo "pre_uninstall"
+# It runs before anything is removed, and a failure stops the uninstall.
+cp "$H/manifest.sh" "$TMP/manifest.orig"
+cat >> "$H/manifest.sh" <<'EOF'
+pre_uninstall() { [ -e "$CLAUDE_DIR/hooks/test-hook.sh" ] && echo present > "$CLAUDE_DIR/pre-ran"; return "${PRE_RC:-0}"; }
+EOF
+"$H/install.sh" --yes >/dev/null 2>&1
+PRE_RC=3 "$H/uninstall.sh" --yes >/dev/null 2>&1 \
+  && no "a failing pre_uninstall stops the uninstall" "exited 0" \
+  || { [ -e "$CLAUDE_DIR/hooks/test-hook.sh" ] \
+         && ok "a failing pre_uninstall stops the uninstall" \
+         || no "a failing pre_uninstall stops the uninstall" "files removed anyway"; }
+rm -f "$CLAUDE_DIR/pre-ran"
+"$H/uninstall.sh" --yes >/dev/null 2>&1
+[ "$(cat "$CLAUDE_DIR/pre-ran" 2>/dev/null)" = present ] && [ ! -e "$CLAUDE_DIR/hooks/test-hook.sh" ] \
+  && ok "pre_uninstall runs while the package is still installed" \
+  || no "pre_uninstall runs while the package is still installed" "$(cat "$CLAUDE_DIR/pre-ran" 2>&1)"
+rm -f "$CLAUDE_DIR/pre-ran"
+cp "$TMP/manifest.orig" "$H/manifest.sh"
+
 echo "upgrading a package"
 UP="$REPO/skill/bin/upgrade-package.sh"
 bash -n "$UP" && ok "upgrade-package.sh parses" || no "upgrade-package.sh parses" "syntax error"

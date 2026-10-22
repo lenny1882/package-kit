@@ -90,6 +90,21 @@ state and `~/.local/share/<name>/` without being told, and the templates leave
 `~/.local/share/<name>` in it, which is harmless: it is removed once either
 way.
 
+## Functions `manifest.sh` can define
+
+All optional. The installers check for each with `declare -F`.
+
+- **`settings_merge`** — reads `settings.json` on stdin, with this package's
+  entries already stripped, and writes it back with them added. Undefined, and
+  `install.sh` leaves `settings.json` alone.
+- **`verify_probe`** — the live check at the end of `install.sh`. Non-zero is
+  reported as a failed install.
+- **`pre_uninstall`** — runs in `uninstall.sh` before anything is removed,
+  while the package's files are still installed. For what only the package can
+  undo: stopping services it started, unlinking units that point into its
+  directory. Non-zero stops the uninstall with nothing removed. It runs under
+  `--keep-state` and `--keep-settings` too.
+
 ## Registering a hook
 
 Two mistakes cost a working guard, both of them silent.
