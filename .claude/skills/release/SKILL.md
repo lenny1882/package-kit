@@ -38,8 +38,11 @@ public GitHub Release.
 - Read `VERSION` for the current version. Work out the new one — ask the
   user (patch/minor/major) if it isn't obvious from what's being released;
   there's no changelog to infer it from.
-- Write the new version to `VERSION` and commit as `Bump version to X.Y.Z`,
-  matching the wording already in this repo's history.
+- Write the new version to `skill/VERSION` and commit as `Bump version to
+  X.Y.Z`, matching the wording already in this repo's history. The root
+  `VERSION` is a symlink to it, so the installed kit — a copy of `skill/` —
+  knows its own version. Write the file, not the symlink: `sed -i` on
+  `VERSION` replaces the symlink with a plain file.
 - Confirm, then `git push origin main`.
 
 ## 3. Move the release branch onto the new commit

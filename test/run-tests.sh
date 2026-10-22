@@ -474,6 +474,12 @@ grep -q "it does what it is supposed to" "$TMP/o" \
   && ok "the scaffolder is executable once installed" || no "the scaffolder is executable once installed" "not +x"
 [ -x "$HOME/.local/share/claude-package-kit/update-check.sh" ] \
   && ok "the update check is installed" || no "the update check is installed" "missing"
+# The installed kit is a copy of skill/ alone, so its version has to live there
+# for .kit/settings to record which kit scaffolded a package.
+[ -L "$REPO/VERSION" ] && [ "$(readlink "$REPO/VERSION")" = skill/VERSION ] \
+  && ok "VERSION is a symlink to skill/VERSION" || no "VERSION is a symlink to skill/VERSION" "$(ls -l "$REPO/VERSION")"
+[ "$(cat "$CLAUDE_DIR/skills/claude-package-kit/VERSION" 2>/dev/null)" = "$(cat "$REPO/VERSION")" ] \
+  && ok "the installed kit knows its version" || no "the installed kit knows its version" "no VERSION in the skill"
 before=$(jq -S . "$CLAUDE_DIR/settings.json")
 "$REPO/install.sh" --link --yes >/dev/null 2>&1 \
   && ok "installing twice is safe" || no "installing twice is safe" "second run failed"
@@ -504,6 +510,8 @@ grep -q "it does what it is supposed to" "$TMP/o" \
   && ok "and the probe passes from a copy install" || no "and the probe passes from a copy install" "$(tail -4 "$TMP/o")"
 [ -f "$CLAUDE_DIR/skills/claude-package-kit/bin/new-package.sh" ] \
   && ok "the scaffolder survives the round trip" || no "the scaffolder survives the round trip" "missing"
+[ -f "$CLAUDE_DIR/skills/claude-package-kit/VERSION" ] \
+  && ok "and so does its VERSION" || no "and so does its VERSION" "missing from a tarball install"
 
 echo "the suite itself"
 # A test run must leave the checkout exactly as it found it. This is here
