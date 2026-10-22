@@ -60,6 +60,14 @@ if [ "$RELEASE" -eq 1 ]; then
   sub < "$MONO/dot-claude/skills/release/SKILL.md" > "$OUT/.claude/skills/release/SKILL.md"
 fi
 
+# .kit/ records what was generated, for upgrade-package.sh --root. See
+# reference/upgrade.md.
+. "$KIT/bin/kit-lib.sh"
+kit_settings "$OUT" "kit=$(kit_version)" "name=$NAME" "kind=monorepo" "slug=$SLUG" "release=$RELEASE"
+owned=(test/run-tests.sh .gitignore)
+[ "$RELEASE" -eq 1 ] && owned+=(.github/workflows/release.yml .claude/skills/release/SKILL.md)
+kit_record "$OUT" "${owned[@]}"
+
 printf '\n== %s (monorepo) created at %s\n\n' "$NAME" "$OUT"
 printf 'Next, in order:\n'
 printf '  1. Replace the placeholder sentence at the top of README.md.\n'

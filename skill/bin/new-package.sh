@@ -162,6 +162,21 @@ if [ -n "$MONO" ] && grep -q '^<!-- new-package.sh --monorepo adds a row' "$MONO
   cat "$tmp" > "$MONO/README.md"; rm -f "$tmp"
 fi
 
+# .kit/ records what was generated, so upgrade-package.sh can tell a file the
+# kit changed from one changed by hand. See reference/upgrade.md.
+. "$KIT/bin/kit-lib.sh"
+kit_settings "$OUT" "kit=$(kit_version)" "name=$NAME" "kind=$KIND" "slug=$SLUG" \
+  "monorepo=$([ -n "$MONO" ] && echo 1 || echo 0)" "release=$RELEASE" "payload=$PAYLOAD"
+owned=(install.sh uninstall.sh test/installer-tests.sh)
+[ "$RELEASE" -eq 1 ] && owned+=(update.sh lib/update-check.sh)
+if [ -z "$MONO" ]; then
+  owned+=(.gitignore)
+  [ "$RELEASE" -eq 1 ] && owned+=(.github/workflows/release.yml .claude/skills/release/SKILL.md)
+fi
+kit_record "$OUT" "${owned[@]}"
+mkdir -p "$OUT/.kit/template"
+sub < "$TEMPLATE/manifest.$KIND.sh" > "$OUT/.kit/template/manifest.sh"
+
 chmod +x "$OUT"/*.sh "$OUT/test/run-tests.sh"
 [ -d "$OUT/lib" ]   && chmod +x "$OUT/lib/"*.sh
 [ -d "$OUT/hooks" ] && chmod +x "$OUT/hooks/"*.sh
