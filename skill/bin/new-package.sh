@@ -115,6 +115,7 @@ mkdir -p "$OUT/test"
 sub < "$TEMPLATE/install.sh"        > "$OUT/install.sh"
 sub < "$TEMPLATE/uninstall.sh"      > "$OUT/uninstall.sh"
 sub < "$TEMPLATE/test/run-tests.sh" > "$OUT/test/run-tests.sh"
+sub < "$TEMPLATE/test/installer-tests.sh" > "$OUT/test/installer-tests.sh"
 sub < "$TEMPLATE/manifest.$KIND.sh" > "$OUT/manifest.sh"
 if [ -n "$MONO" ]; then
   # The root owns .gitignore, and the README's install and release sections

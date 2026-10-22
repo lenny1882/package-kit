@@ -53,7 +53,7 @@ for kind in hook skill command; do
   done
   [ "$bad" = 0 ] && ok "$kind: everything generated parses" || no "$kind: everything generated parses" "syntax error"
 
-  for f in install.sh uninstall.sh README.md VERSION manifest.sh test/run-tests.sh .gitignore; do
+  for f in install.sh uninstall.sh README.md VERSION manifest.sh test/run-tests.sh test/installer-tests.sh .gitignore; do
     [ -e "$out/$f" ] || { no "$kind: has $f" "missing"; bad=1; }
   done
   [ "$bad" = 0 ] && ok "$kind: has the standard files" || true
@@ -154,7 +154,7 @@ echo "a package inside a monorepo"
   && ok "scaffolds into packages/" || no "scaffolds into packages/" "$(tail -3 "$TMP/o")"
 P="$M/packages/mono-hook"
 missing=""
-for f in install.sh uninstall.sh update.sh lib/update-check.sh manifest.sh VERSION README.md PAYLOAD test/run-tests.sh hooks/mono-hook.sh; do
+for f in install.sh uninstall.sh update.sh lib/update-check.sh manifest.sh VERSION README.md PAYLOAD test/run-tests.sh test/installer-tests.sh hooks/mono-hook.sh; do
   [ -f "$P/$f" ] || missing="$missing $f"
 done
 [ -z "$missing" ] && ok "carries every package file" || no "carries every package file" "missing:$missing"
