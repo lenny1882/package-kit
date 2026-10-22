@@ -10,9 +10,10 @@ FILES=(
   "bin/__PKG__:$HOME/.local/bin/__PKG__"
 )
 DIRS=()
-STATE_DIRS=(
-  "$HOME/.local/share/__PKG__"
-)
+# Other directories uninstall.sh removes. Not for state: uninstall.sh already
+# removes the package's state (~/.claude/__PKG__/, unless --keep-state) and
+# ~/.local/share/__PKG__. See reference/layout.md.
+STATE_DIRS=()
 
 # EDIT, or delete if nothing calls this from a hook. claude-notify registers
 # Notification and Stop hooks that shell out to the installed command.

@@ -80,6 +80,14 @@ the two scripts carry the same list.
 `~/.local/share/<name>/` is not state. It holds the installed copy of
 `update-check.sh`, which `install.sh` replaces every time.
 
+`STATE_DIRS` in `manifest.sh` is not for state either, despite the name. It
+lists other directories `uninstall.sh` removes, unconditionally — so state put
+there would ignore `--keep-state`. `uninstall.sh` already removes the package's
+state and `~/.local/share/<name>/` without being told, and the templates leave
+`STATE_DIRS` empty. Older packages list
+`~/.local/share/<name>` in it, which is harmless: it is removed once either
+way.
+
 ## Registering a hook
 
 Two mistakes cost a working guard, both of them silent.

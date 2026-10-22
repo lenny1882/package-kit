@@ -17,10 +17,10 @@ FILES=(
   "hooks/__PKG__.sh:$CLAUDE_DIR/hooks/__PKG__.sh"
 )
 
-# Anything to delete on uninstall beyond FILES.
-STATE_DIRS=(
-  "$HOME/.local/share/__PKG__"
-)
+# Other directories uninstall.sh removes. Not for state: uninstall.sh already
+# removes the package's state (~/.claude/__PKG__/, unless --keep-state) and
+# ~/.local/share/__PKG__. See reference/layout.md.
+STATE_DIRS=()
 
 # EDIT: the settings.json entries. Reads the current settings on stdin and
 # writes the new ones on stdout. strip_ours has already removed this package's

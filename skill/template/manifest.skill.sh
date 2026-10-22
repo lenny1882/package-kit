@@ -11,6 +11,9 @@ DIRS=(
   "skill:$CLAUDE_DIR/skills/__PKG__"
 )
 FILES=()
+# Other directories uninstall.sh removes. Not for state: uninstall.sh already
+# removes the skill's state/ (unless --keep-state) and ~/.local/share/__PKG__.
+# See reference/layout.md.
 STATE_DIRS=()
 
 # No settings entries for a skill. Leaving this undefined is what tells
