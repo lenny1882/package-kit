@@ -79,6 +79,19 @@ package's entries, an installer that is not safe to run twice, a hook whose name
 contains `gsd-` and gets silently deleted by GSD's own migration. All of that is
 already handled.
 
+### Working on a package that already exists
+
+Run the upgrade's dry run first, before changing anything in it:
+
+```bash
+"$HOME/.claude/skills/claude-package-kit/bin/upgrade-package.sh" <package-dir>
+```
+
+It reports which of the kit's files — `install.sh`, `uninstall.sh`, the update
+check, the release workflow — are behind this kit, and shows the diffs. Show the
+user what it found and ask before running it with `--apply`. For a monorepo
+root, use `--root <repo-root>`. `reference/upgrade.md` explains each status.
+
 ## 3. Write it
 
 The generated files leave three things marked, and each one matters:
@@ -125,3 +138,4 @@ skill — or, in a monorepo, the root carries one that takes the package name.
 - `reference/hook-events.md` — what hooks can actually do, most of it undocumented
 - `reference/release.md` — publishing and cutting releases
 - `reference/monorepo.md` — several independently released packages in one repo
+- `reference/upgrade.md` — bringing a package made by an older kit up to date

@@ -15,6 +15,8 @@ everything else.
   lib/update-check.sh              the once-a-day update notice
   hooks/ | skill/ | bin/           the thing itself
   test/run-tests.sh                behaviour first, installer second
+  test/installer-tests.sh          the installer tests, sourced; the kit's
+  .kit/                            what the kit generated; reference/upgrade.md
   .github/workflows/release.yml    tag -> GitHub Release
   .claude/skills/release/SKILL.md  how to cut one
 ```

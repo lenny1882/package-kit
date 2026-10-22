@@ -64,6 +64,16 @@ scaffold the root once and then add each package to it:
 See `skill/reference/monorepo.md` for the layout, and for when one repo per
 package is the better answer.
 
+A package made by an older kit is brought up to date with:
+
+    ~/.claude/skills/claude-package-kit/bin/upgrade-package.sh <package-dir> [--apply]
+    ~/.claude/skills/claude-package-kit/bin/upgrade-package.sh --root <monorepo> [--apply]
+
+Without `--apply` it only reports. It replaces the files the kit owns —
+`install.sh`, `uninstall.sh` and the rest — merges hand edits into them, and
+leaves `manifest.sh`, the README, the tests and the code alone. See
+`skill/reference/upgrade.md`.
+
 ## What a generated package gets
 
 ```
@@ -76,6 +86,8 @@ my-thing/
   lib/update-check.sh              once-a-day update notice
   hooks/ | skill/ | bin/           the thing itself
   test/run-tests.sh                against a throwaway HOME and CLAUDE_DIR
+  test/installer-tests.sh          the installer tests, kept current by the kit
+  .kit/                            what the kit generated, for upgrade-package.sh
   .github/workflows/release.yml    tag -> GitHub Release with an install tarball
   .claude/skills/release/SKILL.md  how to cut one
 ```

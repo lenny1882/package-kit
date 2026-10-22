@@ -440,6 +440,105 @@ sed -i 's/^PKG=.*/PKG="skills"/' "$TMP/test-bare/manifest.sh"
   && ok "uninstall will not delete ~/.claude/skills for a package named skills" \
   || no "uninstall will not delete ~/.claude/skills for a package named skills" "$(tail -3 "$TMP/o")"
 
+echo "upgrading a package"
+UP="$REPO/skill/bin/upgrade-package.sh"
+bash -n "$UP" && ok "upgrade-package.sh parses" || no "upgrade-package.sh parses" "syntax error"
+"$NEW" --name up-hook --kind hook --dir "$TMP" >/dev/null 2>&1
+U="$TMP/up-hook"
+[ -f "$U/.kit/settings" ] && [ -f "$U/.kit/files/install.sh" ] && [ -f "$U/.kit/files/dot-github/workflows/release.yml" ] \
+  && ok "the scaffolder writes .kit/" || no "the scaffolder writes .kit/" "$(find "$U/.kit" 2>&1 | head -5)"
+[ ! -e "$U/.kit/files/.claude" ] && ok "with .claude/ stored as dot-claude/" || no "with .claude/ stored as dot-claude/" "a literal .claude/ under .kit/"
+grep -qx "kit=$(cat "$REPO/skill/VERSION")" "$U/.kit/settings" \
+  && ok ".kit/settings records the kit's version" || no ".kit/settings records the kit's version" "$(cat "$U/.kit/settings")"
+"$UP" "$U" >"$TMP/o" 2>&1 && grep -q "0 to write, 0 left for you" "$TMP/o" \
+  && ok "a fresh package is up to date" || no "a fresh package is up to date" "$(tail -4 "$TMP/o")"
+
+# A newer kit: a copy of skill/ with its templates changed.
+K2="$TMP/kit2"; cp -r "$REPO/skill" "$K2"; rm -f "$K2/VERSION"; echo 9.0.0 > "$K2/VERSION"
+echo "# kit change one" >> "$K2/template/install.sh"
+echo "# kit change two" >> "$K2/template/uninstall.sh"
+sed -i 's/^set -euo pipefail$/set -euo pipefail # kit change three/' "$K2/template/update.sh"
+echo "# kit change four" >> "$K2/template/manifest.hook.sh"
+sed -i '2a # local tweak, near the top' "$U/uninstall.sh"
+sed -i 's/^set -euo pipefail$/set -euo pipefail # local tweak/' "$U/update.sh"
+echo "# local tweak to a file the kit has not changed" >> "$U/lib/update-check.sh"
+owned_sum(){ ( cd "$U" && cat manifest.sh README.md VERSION test/run-tests.sh hooks/up-hook.sh | sha256sum ); }
+before_owned=$(owned_sum); before_install=$(sha256sum < "$U/install.sh")
+"$K2/bin/upgrade-package.sh" "$U" >"$TMP/o" 2>&1
+[ "$(sha256sum < "$U/install.sh")" = "$before_install" ] \
+  && ok "a dry run writes nothing" || no "a dry run writes nothing" "install.sh changed"
+grep -q "stale  *install.sh" "$TMP/o" && grep -q "+# kit change one" "$TMP/o" \
+  && ok "an unedited file is stale, and its diff shown" || no "an unedited file is stale, and its diff shown" "$(grep install.sh "$TMP/o")"
+grep -q "merged  *uninstall.sh" "$TMP/o" \
+  && ok "a hand-edited file merges with the kit's change" || no "a hand-edited file merges with the kit's change" "$(grep uninstall.sh "$TMP/o")"
+grep -q "conflict  *update.sh" "$TMP/o" \
+  && ok "the same line changed both ways is a conflict" || no "the same line changed both ways is a conflict" "$(grep 'update.sh' "$TMP/o" | head -2)"
+grep -q "up to date  *lib/update-check.sh  (hand edits kept)" "$TMP/o" \
+  && ok "a hand edit to a file the kit has not changed stands" || no "a hand edit to a file the kit has not changed stands" "$(grep update-check "$TMP/o")"
+grep -q "+# kit change four" "$TMP/o" && grep -q "the template for a hook package has changed" "$TMP/o" \
+  && ok "a manifest template change is shown, not applied" || no "a manifest template change is shown, not applied" "$(grep -A2 'manifest.sh' "$TMP/o" | head -4)"
+"$K2/bin/upgrade-package.sh" "$U" --apply >"$TMP/o" 2>&1 \
+  && no "--apply fails while a conflict is left" "exited 0" || ok "--apply fails while a conflict is left"
+tail -1 "$U/install.sh" | grep -q "kit change one" && cmp -s "$U/install.sh" "$U/.kit/files/install.sh" \
+  && ok "--apply writes the stale file and records it" || no "--apply writes the stale file and records it" "$(tail -1 "$U/install.sh")"
+grep -q "local tweak, near the top" "$U/uninstall.sh" && grep -q "kit change two" "$U/uninstall.sh" \
+  && ok "the merge keeps the hand edit and the kit's change" || no "the merge keeps the hand edit and the kit's change" "$(head -4 "$U/uninstall.sh")"
+grep -q "pipefail # local tweak$" "$U/update.sh" && ! grep -q '<<<<<<<' "$U/update.sh" \
+  && ok "the conflicting file is left as it was" || no "the conflicting file is left as it was" "$(grep -n 'pipefail\|<<<' "$U/update.sh")"
+! grep -q "kit change three" "$U/.kit/files/update.sh" \
+  && ok "and keeps its old record, to merge against later" || no "and keeps its old record, to merge against later" "record replaced"
+[ -x "$U/install.sh" ] && ok "written files keep their mode" || no "written files keep their mode" "install.sh lost +x"
+[ "$(owned_sum)" = "$before_owned" ] \
+  && ok "manifest.sh, README.md, VERSION, the tests and the code are untouched" || no "manifest.sh, README.md, VERSION, the tests and the code are untouched" "a package-owned file changed"
+"$K2/bin/upgrade-package.sh" "$U" --apply --force update.sh >"$TMP/o" 2>&1 \
+  && ok "--force resolves the conflict" || no "--force resolves the conflict" "$(tail -3 "$TMP/o")"
+grep -q "kit change three" "$U/update.sh" && ! grep -q "local tweak" "$U/update.sh" \
+  && ok "by taking the new kit's version" || no "by taking the new kit's version" "$(grep -n pipefail "$U/update.sh")"
+grep -qx "kit=9.0.0" "$U/.kit/settings" && ok ".kit/settings records the new kit" || no ".kit/settings records the new kit" "$(grep kit= "$U/.kit/settings")"
+"$K2/bin/upgrade-package.sh" "$U" >"$TMP/o" 2>&1 && grep -q "0 to write, 0 left for you" "$TMP/o" \
+  && ok "and a second run finds nothing to do" || no "and a second run finds nothing to do" "$(tail -3 "$TMP/o")"
+grep -q "template for a hook package has changed" "$TMP/o" \
+  && no "the manifest notice is given once" "repeated" || ok "the manifest notice is given once"
+"$UP" "$U" >"$TMP/o" 2>&1 \
+  && no "an older kit refuses" "ran" || { grep -q "newer than this kit" "$TMP/o" && ok "an older kit refuses" || no "an older kit refuses" "$(tail -2 "$TMP/o")"; }
+"$UP" "$U" --allow-downgrade >"$TMP/o" 2>&1; grep -q "stale  *install.sh" "$TMP/o" \
+  && ok "unless --allow-downgrade" || no "unless --allow-downgrade" "$(tail -3 "$TMP/o")"
+"$UP" "$U" --force manifest.sh >"$TMP/o" 2>&1 --allow-downgrade \
+  && no "--force refuses a file the kit does not own" "accepted" || ok "--force refuses a file the kit does not own"
+
+echo "upgrading a package made before .kit/"
+"$NEW" --name old-skill --kind skill --dir "$TMP" >/dev/null 2>&1
+O="$TMP/old-skill"; rm -rf "$O/.kit"
+echo "# hand edit" >> "$O/install.sh"
+"$UP" "$O" >"$TMP/o" 2>&1
+grep -q "no .kit/" "$TMP/o" && grep -q "== old-skill (skill)" "$TMP/o" && grep -q "slug=lenny1882/old-skill monorepo=0 release=1 payload=skill lib" "$TMP/o" \
+  && ok "reads its settings from the package" || no "reads its settings from the package" "$(sed -n 1,5p "$TMP/o")"
+grep -q "hand-edited  *install.sh" "$TMP/o" && grep -q "up to date  *uninstall.sh" "$TMP/o" \
+  && ok "a differing file is hand-edited, a matching one up to date" || no "a differing file is hand-edited, a matching one up to date" "$(grep 'install.sh' "$TMP/o")"
+"$UP" "$O" --apply --adopt install.sh >"$TMP/o" 2>&1 \
+  && ok "--adopt keeps the hand edit" || no "--adopt keeps the hand edit" "$(tail -3 "$TMP/o")"
+tail -1 "$O/install.sh" | grep -q "hand edit" && [ -f "$O/.kit/files/install.sh" ] && ! grep -q "hand edit" "$O/.kit/files/install.sh" \
+  && ok "and records the render as its origin" || no "and records the render as its origin" "$(ls "$O/.kit/files" 2>&1)"
+sed -i '/^. "\$REPO\/test\/installer-tests.sh"$/d' "$O/test/run-tests.sh"
+"$UP" "$O" >"$TMP/o" 2>&1
+grep -q "does not source test/installer-tests.sh" "$TMP/o" \
+  && ok "says when run-tests.sh does not source the installer tests" || no "says when run-tests.sh does not source the installer tests" "no notice"
+cp -r "$P" "$TMP/old-mono-copy"; rm -rf "$P/.kit"
+"$UP" "$P" >"$TMP/o" 2>&1
+grep -q "slug=lenny1882/test-mono monorepo=1" "$TMP/o" && grep -q "up to date  *update.sh" "$TMP/o" \
+  && ok "a monorepo package keeps its versions.txt lookup" || no "a monorepo package keeps its versions.txt lookup" "$(sed -n 3,14p "$TMP/o")"
+rm -rf "$P"; mv "$TMP/old-mono-copy" "$P"
+
+echo "upgrading a monorepo root"
+"$UP" --root "$M" >"$TMP/o" 2>&1 && grep -q "0 to write, 0 left for you" "$TMP/o" \
+  && ok "a fresh root is up to date" || no "a fresh root is up to date" "$(tail -4 "$TMP/o")"
+echo "# kit change" >> "$K2/template/monorepo/test/run-tests.sh"
+"$K2/bin/upgrade-package.sh" --root "$M" >"$TMP/o" 2>&1
+grep -q "stale  *test/run-tests.sh" "$TMP/o" \
+  && ok "its test runner is kit-owned" || no "its test runner is kit-owned" "$(grep run-tests "$TMP/o")"
+"$UP" --root "$P" >"$TMP/o" 2>&1 \
+  && no "--root refuses a package" "accepted" || ok "--root refuses a package"
+
 echo "the generated tests fail until behaviour is tested"
 "$TMP/test-hook/test/run-tests.sh" >"$TMP/o" 2>&1
 grep -q "no behaviour tests written yet" "$TMP/o" \

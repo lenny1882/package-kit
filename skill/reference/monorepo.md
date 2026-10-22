@@ -43,13 +43,15 @@ repo is not `lenny1882/<repo>`; each package reads it from the root README.
   .gitignore
   .github/workflows/release.yml    <package>-vX.Y.Z tag -> that package's release
   .claude/skills/release/SKILL.md  /release <package>
+  .kit/                            what the kit generated, for upgrade-package.sh --root
   packages/
     <package>/
       README.md  VERSION  PAYLOAD
       manifest.sh  install.sh  uninstall.sh  update.sh
       lib/update-check.sh
       hooks/ | skill/ | bin/
-      test/run-tests.sh
+      test/run-tests.sh  test/installer-tests.sh
+      .kit/
 ```
 
 Everything a standalone package has, less `.github/`, `.claude/` and
@@ -61,7 +63,8 @@ release, never from a checkout.
 list a standalone package's workflow spells out on its `git archive` line. It
 lives with the package because one workflow serves every package and the list
 differs by kind. Anything else in the package directory — a backlog, a handoff,
-a repro project — stays out of the tarball.
+a repro project — stays out of the tarball. So does `.kit/`, which is committed
+but only read by `upgrade-package.sh`.
 
 ## Tags, branches and versions
 

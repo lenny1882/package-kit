@@ -17,6 +17,7 @@ upgrade-package.sh --root <monorepo>      the same for a monorepo root's own fil
 |---|---|
 | `--apply` | write the files marked stale, new or merged |
 | `--force <file>` | replace this file with the new render, discarding hand edits; repeatable |
+| `--adopt <file>` | keep this hand-edited file as it is, and record the new render as what it came from, so later upgrades merge into it; for a package with no `.kit/` yet; repeatable |
 | `--kind`, `--slug`, `--monorepo <root>` | override what was read from `.kit/settings` or inferred |
 | `--allow-downgrade` | run although the package was made by a newer kit than this one |
 
@@ -84,8 +85,9 @@ compared with what is on disk and with its copy in `.kit/files/`:
 | missing | new | written |
 | same as the new render | up to date | nothing |
 | same as `.kit/files/` | stale | replaced |
+| differs from both, and the kit has not changed it | up to date (hand edits kept) | nothing |
 | differs from both | merged, or conflict | `git merge-file` combines the hand edits with the kit's changes. A clean merge is written. A conflict is shown with its markers and left alone unless `--force` |
-| differs, and there is no `.kit/` copy | hand-edited | diff shown; left alone unless `--force` |
+| differs, and there is no `.kit/` copy | hand-edited | diff shown; left alone unless `--force` or `--adopt` |
 
 `.gitignore` with no `.kit/` copy is the exception: the kit's lines missing from
 it are appended, since the order of the lines rarely matters and adding one
@@ -110,8 +112,9 @@ The settings are read from the package itself, and printed:
   every tarball carries.
 
 With no record of what was generated, every file that differs is hand-edited.
-The first upgrade of an old package is a read of each diff and a `--force` per
-file; after it, `.kit/` exists and later upgrades merge.
+The first upgrade of an old package is a read of each diff and, per file, a
+`--force` to take the kit's version or an `--adopt` to keep the package's.
+After it, `.kit/` exists and later upgrades merge.
 
 An old package's `test/run-tests.sh` has the installer tests written inline.
 The upgrade writes `test/installer-tests.sh` and says that `run-tests.sh` does
