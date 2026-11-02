@@ -60,3 +60,10 @@ verify_probe() {
 # pre_uninstall() {
 #   systemctl --user stop "$PKG.service" 2>/dev/null || true
 # }
+
+# Optional. Runs in uninstall.sh after everything is removed, to undo a change
+# outside $HOME that needs none of the package's files. Skipped when
+# KIT_SKIP_MACHINE_HOOKS=1. Non-zero is reported; nothing is put back.
+# post_uninstall() {
+#   loginctl disable-linger "$USER"
+# }

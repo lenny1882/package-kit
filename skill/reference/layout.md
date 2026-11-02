@@ -123,6 +123,13 @@ All optional. The installers check for each with `declare -F`.
   undo: stopping services it started, unlinking units that point into its
   directory. Non-zero stops the uninstall with nothing removed. It runs under
   `--keep-state` and `--keep-settings` too.
+- **`post_uninstall`** — runs in `uninstall.sh` once the files, state and
+  settings entries are removed. For undoing a `post_install` change that needs
+  none of the package's files, such as `loginctl disable-linger`, only once the
+  removal has gone through. Everything is already gone, so non-zero is
+  reported as a failed uninstall, not undone. Skipped when
+  `KIT_SKIP_MACHINE_HOOKS=1` is set. It runs under `--keep-state` and
+  `--keep-settings` too.
 
 ## Registering a hook
 

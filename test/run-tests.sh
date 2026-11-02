@@ -520,6 +520,34 @@ rm -f "$CLAUDE_DIR/pre-ran"
 rm -f "$CLAUDE_DIR/pre-ran"
 cp "$TMP/manifest.orig" "$H/manifest.sh"
 
+echo "post_uninstall"
+# It runs after everything is removed, is skipped under KIT_SKIP_MACHINE_HOOKS=1,
+# and a failure is reported with a non-zero exit.
+cp "$H/manifest.sh" "$TMP/manifest.orig"
+cat >> "$H/manifest.sh" <<'EOF'
+post_uninstall() { [ -e "$CLAUDE_DIR/hooks/test-hook.sh" ] && echo present > "$CLAUDE_DIR/postun-ran" || echo absent > "$CLAUDE_DIR/postun-ran"; return "${POSTUN_RC:-0}"; }
+EOF
+"$H/install.sh" --yes >/dev/null 2>&1
+rm -f "$CLAUDE_DIR/postun-ran"
+KIT_SKIP_MACHINE_HOOKS=0 "$H/uninstall.sh" --yes >"$TMP/o" 2>&1
+[ "$(cat "$CLAUDE_DIR/postun-ran" 2>/dev/null)" = absent ] && grep -q 'ok    post_uninstall$' "$TMP/o" \
+  && ok "post_uninstall runs once the files are gone" \
+  || no "post_uninstall runs once the files are gone" "$(tail -5 "$TMP/o")"
+rm -f "$CLAUDE_DIR/postun-ran"
+"$H/install.sh" --yes >/dev/null 2>&1
+"$H/uninstall.sh" --yes >"$TMP/o" 2>&1
+[ ! -e "$CLAUDE_DIR/postun-ran" ] && grep -q 'post_uninstall skipped (KIT_SKIP_MACHINE_HOOKS=1)' "$TMP/o" \
+  && ok "KIT_SKIP_MACHINE_HOOKS=1 skips post_uninstall and says so" \
+  || no "KIT_SKIP_MACHINE_HOOKS=1 skips post_uninstall and says so" "$(tail -5 "$TMP/o")"
+"$H/install.sh" --yes >/dev/null 2>&1
+KIT_SKIP_MACHINE_HOOKS=0 POSTUN_RC=3 "$H/uninstall.sh" --yes >"$TMP/o" 2>&1 \
+  && no "a failing post_uninstall fails the uninstall" "exited 0" \
+  || { [ ! -e "$CLAUDE_DIR/hooks/test-hook.sh" ] && grep -q 'post_uninstall in manifest.sh failed' "$TMP/o" \
+         && ok "a failing post_uninstall fails the uninstall, with the files already gone" \
+         || no "a failing post_uninstall fails the uninstall, with the files already gone" "$(tail -5 "$TMP/o")"; }
+rm -f "$CLAUDE_DIR/postun-ran"
+cp "$TMP/manifest.orig" "$H/manifest.sh"
+
 echo "upgrading a package"
 UP="$REPO/skill/bin/upgrade-package.sh"
 bash -n "$UP" && ok "upgrade-package.sh parses" || no "upgrade-package.sh parses" "syntax error"

@@ -124,4 +124,21 @@ else
   ok "left alone"
 fi
 
+# post_uninstall runs once everything is removed, to undo a change outside
+# $HOME that needs none of the package's files — loginctl disable-linger, say.
+# Everything is already gone, so a failure is reported, not undone. Test
+# harnesses set KIT_SKIP_MACHINE_HOOKS=1, as for pre_install and post_install.
+if declare -F post_uninstall >/dev/null; then
+  step "After removing"
+  if [ "${KIT_SKIP_MACHINE_HOOKS:-0}" = 1 ]; then
+    ok "post_uninstall skipped (KIT_SKIP_MACHINE_HOOKS=1)"
+  elif post_uninstall; then
+    ok "post_uninstall"
+  else
+    warn "post_uninstall in manifest.sh failed — the package is removed, but the step after it is not done"
+    printf '\n%s\n' "Finished with problems — see the warning above."
+    exit 1
+  fi
+fi
+
 printf '\n%s\n' "Done."
