@@ -5,6 +5,10 @@
 # package's own tests in run-tests.sh. Expects REPO, TMP, CLAUDE_DIR and the ok
 # and no functions to be set already.
 
+# post_install changes the real machine, not the throwaway HOME. Exported here
+# as well as in run-tests.sh, for a run-tests.sh written before the hook existed.
+export KIT_SKIP_POST_INSTALL=1
+
 echo "sanity"
 for f in "$REPO"/*.sh "$REPO"/hooks/*.sh "$REPO"/lib/*.sh; do
   [ -f "$f" ] || continue

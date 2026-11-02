@@ -9,6 +9,7 @@ NEW="$REPO/skill/bin/new-package.sh"
 NEWMONO="$REPO/skill/bin/new-monorepo.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
+export KIT_SKIP_POST_INSTALL=1   # post_install changes the real machine, not $HOME
 
 REPO_SNAPSHOT=$(find "$REPO" -path "$REPO/.git" -prune -o -print | sort)
 pass=0; fail=0
@@ -439,6 +440,36 @@ sed -i 's/^PKG=.*/PKG="skills"/' "$TMP/test-bare/manifest.sh"
 [ -d "$CLAUDE_DIR/skills/someone-else" ] && grep -q "not removing" "$TMP/o" \
   && ok "uninstall will not delete ~/.claude/skills for a package named skills" \
   || no "uninstall will not delete ~/.claude/skills for a package named skills" "$(tail -3 "$TMP/o")"
+
+echo "post_install"
+# Runs after the files are in place, before verify_probe; skipped on a dry run
+# and under KIT_SKIP_POST_INSTALL=1; a failure fails the install.
+cp "$H/manifest.sh" "$TMP/manifest.orig"
+cat >> "$H/manifest.sh" <<'EOF'
+post_install() { [ -e "$CLAUDE_DIR/hooks/test-hook.sh" ] && echo present > "$CLAUDE_DIR/post-ran"; return "${POST_RC:-0}"; }
+EOF
+rm -f "$CLAUDE_DIR/post-ran"
+KIT_SKIP_POST_INSTALL=0 "$H/install.sh" --yes >"$TMP/o" 2>&1
+[ "$(cat "$CLAUDE_DIR/post-ran" 2>/dev/null)" = present ] && grep -q 'ok    post_install$' "$TMP/o" \
+  && ok "post_install runs after the files are in place" \
+  || no "post_install runs after the files are in place" "$(tail -5 "$TMP/o")"
+rm -f "$CLAUDE_DIR/post-ran"
+"$H/install.sh" --yes >"$TMP/o" 2>&1
+[ ! -e "$CLAUDE_DIR/post-ran" ] && grep -q 'post_install skipped (KIT_SKIP_POST_INSTALL=1)' "$TMP/o" \
+  && ok "KIT_SKIP_POST_INSTALL=1 skips post_install and says so" \
+  || no "KIT_SKIP_POST_INSTALL=1 skips post_install and says so" "$(tail -5 "$TMP/o")"
+KIT_SKIP_POST_INSTALL=0 "$H/install.sh" --dry-run >"$TMP/o" 2>&1
+[ ! -e "$CLAUDE_DIR/post-ran" ] \
+  && ok "--dry-run does not run post_install" \
+  || no "--dry-run does not run post_install" "$(tail -5 "$TMP/o")"
+KIT_SKIP_POST_INSTALL=0 POST_RC=3 "$H/install.sh" --yes >"$TMP/o" 2>&1 \
+  && no "a failing post_install fails the install" "exited 0" \
+  || { grep -q 'post_install in manifest.sh failed' "$TMP/o" \
+         && ok "a failing post_install fails the install" \
+         || no "a failing post_install fails the install" "$(tail -5 "$TMP/o")"; }
+rm -f "$CLAUDE_DIR/post-ran"
+"$H/uninstall.sh" --yes >/dev/null 2>&1
+cp "$TMP/manifest.orig" "$H/manifest.sh"
 
 echo "pre_uninstall"
 # It runs before anything is removed, and a failure stops the uninstall.

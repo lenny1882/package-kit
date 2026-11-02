@@ -37,3 +37,19 @@ verify_probe() {
     *) printf '  warn  %s is not on PATH\n' "$HOME/.local/bin"; return 0 ;;
   esac
 }
+
+# Optional. Runs once after a real install, before verify_probe, for a change
+# outside $HOME — say, letting this package's systemd user services start at
+# boot. Skipped on --dry-run and when KIT_SKIP_POST_INSTALL=1 (the tests set
+# it). Must be safe to run again: every reinstall runs it. Non-zero fails the
+# install.
+# post_install() {
+#   loginctl enable-linger "$USER"
+# }
+
+# Optional. Runs in uninstall.sh before anything is removed, while the files
+# are still installed: stop services started from the package's directory.
+# Non-zero stops the uninstall with nothing removed.
+# pre_uninstall() {
+#   systemctl --user stop "$PKG.service" 2>/dev/null || true
+# }

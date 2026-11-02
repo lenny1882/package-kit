@@ -152,8 +152,27 @@ if [ -x "$LIB_DIR/update-check.sh" ]; then
   ok "v$VERSION, repo at $REPO"
 fi
 
-step "Verifying"
 fail=0
+
+# post_install is for a change outside $HOME that a real install needs — say,
+# loginctl enable-linger so the package's systemd user services start at boot.
+# A dry run never reaches here, but the guard says so anyway. Test harnesses
+# set KIT_SKIP_POST_INSTALL=1, because their installs go into a throwaway HOME
+# while post_install would change the real machine.
+if declare -F post_install >/dev/null; then
+  step "After installing"
+  if [ "$DRY" -eq 1 ]; then
+    ok "post_install skipped (dry run)"
+  elif [ "${KIT_SKIP_POST_INSTALL:-0}" = 1 ]; then
+    ok "post_install skipped (KIT_SKIP_POST_INSTALL=1)"
+  elif post_install; then
+    ok "post_install"
+  else
+    warn "post_install in manifest.sh failed — the files are installed, but the step after them is not done"; fail=1
+  fi
+fi
+
+step "Verifying"
 for entry in ${FILES[@]+"${FILES[@]}"} ${DIRS[@]+"${DIRS[@]}"}; do
   [ -e "${entry#*:}" ] && ok "${entry#*:}" || { warn "missing ${entry#*:}"; fail=1; }
 done
