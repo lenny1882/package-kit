@@ -59,7 +59,9 @@ registers it on `SessionStart` (matcher `startup`) as
 `~/.local/share/<name>/update-check.sh session-start`. That prints, as a
 `systemMessage`, the release the last check found, then starts today's check
 detached with every stream closed, so the session never waits on the network.
-The check runs at most once a day, and is what fires `update_available`.
+The check runs at most once a day, and is what fires `update_available`. The
+same background job runs `claude-check` every time, which fires
+`claude_updated`.
 
 The entry is added after `settings_merge`, removed by exact command on every
 reinstall and by `uninstall.sh`, and left out for a package without releases.
@@ -170,6 +172,17 @@ All optional. The installers check for each with `declare -F`.
   its failure is logged there without failing the check. Skipped when
   `KIT_SKIP_MACHINE_HOOKS=1` is set. `update-check.sh clear` makes it fire
   again for the same release.
+- **`claude_updated`** — runs when Claude Code's version differs from the one
+  seen last time, with `$1` the old version and `$2` the new one. The update
+  notice's `SessionStart` entry runs `update-check.sh claude-check` in the
+  background on every session start; the first run only records the version,
+  in `~/.local/state/<name>/claude-version`. For a package that keeps
+  something running on Claude Code — a Remote Control server, say — and has to
+  restart it on the new version. Like `update_available` it cannot show
+  anything in a session, its output and failures go to
+  `~/.local/state/<name>/claude_updated.log`, and `KIT_SKIP_MACHINE_HOOKS=1`
+  skips it. A package with `UPDATE_NOTICE=0` or no releases has no
+  `SessionStart` entry, so nothing runs it.
 - **`pre_uninstall`** — runs in `uninstall.sh` before anything is removed,
   while the package's files are still installed. For what only the package can
   undo: stopping services it started, unlinking units that point into its

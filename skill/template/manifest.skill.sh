@@ -78,6 +78,14 @@ verify_probe() {
 #   notify-send "__PKG__ v$2 is available" "$3" 2>/dev/null || true
 # }
 
+# Optional. Run in the background at session start when Claude Code's version
+# has changed since last time, with $1 the old version and $2 the new one.
+# Output goes to ~/.local/state/__PKG__/claude_updated.log. Skipped when
+# KIT_SKIP_MACHINE_HOOKS=1.
+# claude_updated() {
+#   systemctl --user restart "$PKG.service" 2>/dev/null || true
+# }
+
 # install.sh registers lib/update-check.sh on SessionStart, to show a waiting
 # release and run the daily check. Set this to 0 to leave that out.
 # UPDATE_NOTICE=0

@@ -144,6 +144,35 @@ KIT_SKIP_MACHINE_HOOKS=0 PATH="$TMP/stub:$PATH" "$out/lib/update-check.sh" check
 "$out/lib/update-check.sh" record-install 0.1.0 "$out"
 rm -f "$UA_OUT"; cp "$TMP/manifest.ua" "$out/manifest.sh"
 
+echo "claude_updated"
+# claude-check records Claude Code's version the first time and runs
+# claude_updated, with the old and new versions, each time it changes.
+cat >> "$out/manifest.sh" <<'EOF'
+claude_updated() { echo "$1 $2" >> "$UA_OUT"; return "${CU_RC:-0}"; }
+EOF
+mkdir -p "$TMP/cl-stub"
+printf '#!/bin/sh\necho "$CL_VER (Claude Code)"\n' > "$TMP/cl-stub/claude"; chmod +x "$TMP/cl-stub/claude"
+CUL="$TMP/state/test-hook/claude_updated.log"; CVF="$TMP/state/test-hook/claude-version"
+rm -f "$UA_OUT" "$CVF"
+cc(){ PATH="$TMP/cl-stub:$PATH" CL_VER="$1" KIT_SKIP_MACHINE_HOOKS="${2:-0}" "$out/lib/update-check.sh" claude-check; }
+cc 2.0.0
+[ "$(cat "$CVF" 2>/dev/null)" = 2.0.0 ] && [ ! -e "$UA_OUT" ] \
+  && ok "the first claude-check records the version and runs nothing" \
+  || no "the first claude-check records the version and runs nothing" "$(cat "$CVF" "$UA_OUT" 2>&1)"
+cc 2.0.0
+[ ! -e "$UA_OUT" ] && ok "the same version runs nothing" || no "the same version runs nothing" "$(cat "$UA_OUT")"
+cc 2.1.0
+[ "$(cat "$UA_OUT" 2>/dev/null)" = "2.0.0 2.1.0" ] && grep -q 'claude_updated ok' "$CUL" \
+  && ok "a new version runs claude_updated with old and new, logged" \
+  || no "a new version runs claude_updated with old and new, logged" "$(cat "$UA_OUT" "$CUL" 2>&1)"
+rm -f "$UA_OUT"
+cc 2.2.0 1
+[ ! -e "$UA_OUT" ] && ok "KIT_SKIP_MACHINE_HOOKS=1 skips claude_updated" || no "KIT_SKIP_MACHINE_HOOKS=1 skips claude_updated" "ran"
+CU_RC=3 cc 2.3.0 && grep -q 'claude_updated failed (status 3)' "$CUL" \
+  && ok "a failing claude_updated is logged and claude-check still exits 0" \
+  || no "a failing claude_updated is logged and claude-check still exits 0" "$(tail -2 "$CUL" 2>&1)"
+rm -f "$UA_OUT" "$CVF"; cp "$TMP/manifest.ua" "$out/manifest.sh"
+
 printf '#!/bin/sh\nprintf %s\n' "'{}\n404'" > "$TMP/stub/curl"
 PATH="$TMP/stub:$PATH" "$out/update.sh" --check >"$TMP/o" 2>&1 \
   && no "update.sh stops when there is no release" "exited 0" \
@@ -663,7 +692,8 @@ count_notice() { jq --arg c "$NC" '[.hooks.SessionStart[]?.hooks[]? | select(.co
 UCS="$HOME/.local/state/test-hook"; mkdir -p "$TMP/ns-stub"
 printf '#!/bin/sh\nprintf %s\n' "'{\"tag_name\":\"v9.9.9\",\"html_url\":\"https://example.invalid/r\"}\n200'" > "$TMP/ns-stub/curl"
 chmod +x "$TMP/ns-stub/curl"
-echo 9.9.9 > "$UCS/available"; rm -f "$UCS/last-check"
+printf '#!/bin/sh\necho "3.0.0 (Claude Code)"\n' > "$TMP/ns-stub/claude"; chmod +x "$TMP/ns-stub/claude"
+echo 9.9.9 > "$UCS/available"; rm -f "$UCS/last-check" "$UCS/claude-version"
 start=$(date +%s)
 PATH="$TMP/ns-stub:$PATH" timeout 10 "$HOME/.local/share/test-hook/update-check.sh" session-start >"$TMP/o" 2>&1
 took=$(( $(date +%s) - start ))
@@ -674,6 +704,9 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$UCS/last-check" ] && break; sleep 0.5; 
 [ "$(cat "$UCS/last-check" 2>/dev/null)" = "$(date +%F)" ] \
   && ok "session-start runs today's check in the background" \
   || no "session-start runs today's check in the background" "no stamp in $UCS"
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$UCS/claude-version" ] && break; sleep 0.5; done
+[ "$(cat "$UCS/claude-version" 2>/dev/null)" = 3.0.0 ] \
+  && ok "and claude-check after it" || no "and claude-check after it" "no claude-version in $UCS"
 cp "$H/manifest.sh" "$TMP/manifest.nt"; echo 'UPDATE_NOTICE=0' >> "$H/manifest.sh"
 "$H/install.sh" --yes >/dev/null 2>&1
 [ "$(count_notice)" = 0 ] && jq -e '.hooks.PreToolUse' "$CLAUDE_DIR/settings.json" >/dev/null \
