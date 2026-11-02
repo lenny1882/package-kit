@@ -59,6 +59,33 @@ case "$PKG" in
           warn "Rename it." ;;
 esac
 
+# pre_install and post_install are for changes outside $HOME — stopping the
+# package's systemd user services before their files are replaced, then
+# loginctl enable-linger and starting them again. Both get MODE as $1:
+# "install" when none of this package's files were there, "reinstall" when
+# some were (an update, or the same version run again). A dry run never runs
+# either. Test harnesses set KIT_SKIP_MACHINE_HOOKS=1, because their installs
+# go into a throwaway HOME while these hooks change the real machine.
+MODE=install
+for entry in ${FILES[@]+"${FILES[@]}"} ${DIRS[@]+"${DIRS[@]}"}; do
+  if [ -e "${entry#*:}" ] || [ -L "${entry#*:}" ]; then MODE=reinstall; break; fi
+done
+
+if [ "$DRY" -eq 1 ]; then
+  for h in pre_install post_install; do
+    declare -F "$h" >/dev/null && ok "$h skipped (dry run)"
+  done
+elif declare -F pre_install >/dev/null; then
+  step "Before installing"
+  if [ "${KIT_SKIP_MACHINE_HOOKS:-0}" = 1 ]; then
+    ok "pre_install skipped (KIT_SKIP_MACHINE_HOOKS=1)"
+  elif pre_install "$MODE"; then
+    ok "pre_install"
+  else
+    say "  pre_install in manifest.sh failed — nothing installed."; exit 1
+  fi
+fi
+
 # A skill keeps its state in state/ inside its installed directory. The rm -rf
 # below would delete it on every install and upgrade, so it is set aside first
 # and put back after. With --link the directory is the checkout's and state/
@@ -154,18 +181,11 @@ fi
 
 fail=0
 
-# post_install is for a change outside $HOME that a real install needs — say,
-# loginctl enable-linger so the package's systemd user services start at boot.
-# A dry run never reaches here, but the guard says so anyway. Test harnesses
-# set KIT_SKIP_POST_INSTALL=1, because their installs go into a throwaway HOME
-# while post_install would change the real machine.
 if declare -F post_install >/dev/null; then
   step "After installing"
-  if [ "$DRY" -eq 1 ]; then
-    ok "post_install skipped (dry run)"
-  elif [ "${KIT_SKIP_POST_INSTALL:-0}" = 1 ]; then
-    ok "post_install skipped (KIT_SKIP_POST_INSTALL=1)"
-  elif post_install; then
+  if [ "${KIT_SKIP_MACHINE_HOOKS:-0}" = 1 ]; then
+    ok "post_install skipped (KIT_SKIP_MACHINE_HOOKS=1)"
+  elif post_install "$MODE"; then
     ok "post_install"
   else
     warn "post_install in manifest.sh failed — the files are installed, but the step after them is not done"; fail=1

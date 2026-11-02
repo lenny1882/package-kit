@@ -99,16 +99,25 @@ All optional. The installers check for each with `declare -F`.
   `install.sh` leaves `settings.json` alone.
 - **`verify_probe`** — the live check at the end of `install.sh`. Non-zero is
   reported as a failed install.
-- **`post_install`** — runs once in `install.sh` after the files and settings
-  are in place, before `verify_probe`. For a change outside `$HOME` that a real
+- **`pre_install`** — runs in `install.sh` after the prerequisite check,
+  before any file is placed. For what has to happen before the package's files
+  are replaced: stopping systemd user services that run from its directory,
+  which `install.sh` deletes and copies again on every reinstall, or checking a
+  prerequisite beyond `jq`. Non-zero stops the install with nothing placed.
+- **`post_install`** — runs in `install.sh` after the files and settings are in
+  place, before `verify_probe`. For a change outside `$HOME` that a real
   install needs, such as `loginctl enable-linger` so the package's systemd user
-  services start at boot with nobody logged in. Skipped on `--dry-run`, and
-  when `KIT_SKIP_POST_INSTALL=1` is set — `test/run-tests.sh` and
+  services start at boot with nobody logged in, or starting the services
+  `pre_install` stopped. Non-zero is reported as a failed install. It must be
+  safe to run again: every reinstall and update runs it. `pre_uninstall` is
+  where to undo it, if it should be undone.
+
+  Both get `$1`: `install` when none of the package's `FILES` or `DIRS` were
+  there, `reinstall` when any were — an update, or the same version run again.
+  Neither runs on `--dry-run`; the dry run lists them as skipped. Neither runs
+  when `KIT_SKIP_MACHINE_HOOKS=1` is set, and says so. `test/run-tests.sh` and
   `test/installer-tests.sh` export it, because their installs go into a
-  throwaway `HOME` and `post_install` would change the real machine. Non-zero
-  is reported as a failed install. It must be safe to run again: every
-  reinstall and update runs it. `pre_uninstall` is where to undo it, if it
-  should be undone.
+  throwaway `HOME` and these hooks would change the real machine.
 - **`pre_uninstall`** — runs in `uninstall.sh` before anything is removed,
   while the package's files are still installed. For what only the package can
   undo: stopping services it started, unlinking units that point into its

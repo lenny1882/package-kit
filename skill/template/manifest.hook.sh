@@ -69,13 +69,20 @@ verify_probe() {
   printf '%s' "$out" | jq -e . >/dev/null 2>&1
 }
 
-# Optional. Runs once after a real install, before verify_probe, for a change
-# outside $HOME — say, letting this package's systemd user services start at
-# boot. Skipped on --dry-run and when KIT_SKIP_POST_INSTALL=1 (the tests set
-# it). Must be safe to run again: every reinstall runs it. Non-zero fails the
-# install.
+# Optional, both. Changes outside $HOME around a real install. pre_install
+# runs before any file is placed — stop services running from the package's
+# directory, which a reinstall deletes and copies again; non-zero stops the
+# install with nothing placed. post_install runs after the files and settings,
+# before verify_probe; non-zero fails the install. Each gets $1: "install" the
+# first time, "reinstall" when the package's files were already there. Neither
+# runs on --dry-run or when KIT_SKIP_MACHINE_HOOKS=1 (the tests set it). Both
+# must be safe to run again.
+# pre_install() {
+#   [ "$1" = reinstall ] && systemctl --user stop "$PKG.service" 2>/dev/null
+#   return 0
+# }
 # post_install() {
-#   loginctl enable-linger "$USER"
+#   loginctl enable-linger "$USER" && systemctl --user restart "$PKG.service"
 # }
 
 # Optional. Runs in uninstall.sh before anything is removed, while the files

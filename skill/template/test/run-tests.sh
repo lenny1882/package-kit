@@ -11,7 +11,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
 export CLAUDE_DIR="$TMP/claude"; mkdir -p "$CLAUDE_DIR"
-export KIT_SKIP_POST_INSTALL=1   # post_install changes the real machine, not $HOME
+export KIT_SKIP_MACHINE_HOOKS=1   # pre_install and post_install change the real machine, not $HOME
 
 pass=0; fail=0
 ok(){ printf '  ok    %s\n' "$1"; pass=$((pass+1)); }
