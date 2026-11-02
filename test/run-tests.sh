@@ -590,6 +590,7 @@ U="$TMP/upd/test-hook"; mkdir -p "$TMP/upd"; cp -r "$H" "$U"; echo 0.1.0 > "$U/V
 cp -r "$U" "$TMP/upd-new"; echo 9.9.9 > "$TMP/upd-new/VERSION"
 cat >> "$TMP/upd-new/manifest.sh" <<'EOF'
 pre_update()  { echo "$1 $2 $(cat "$UPD_REPO/VERSION")" > "$CLAUDE_DIR/preup-ran";  return "${PREUP_RC:-0}"; }
+install_failed() { echo "$1|$2" > "$CLAUDE_DIR/updfail-ran"; }
 post_update() { echo "$1 $2 $(cat "$UPD_REPO/VERSION")" > "$CLAUDE_DIR/postup-ran"; return "${POSTUP_RC:-0}"; }
 EOF
 mkdir -p "$TMP/upd-tar/test-hook"; cp -r "$TMP/upd-new/." "$TMP/upd-tar/test-hook/"
@@ -625,6 +626,15 @@ KIT_SKIP_MACHINE_HOOKS=0 POSTUP_RC=3 PATH="$TMP/upd-stub:$PATH" "$U/update.sh" -
   || { [ "$(cat "$U/VERSION")" = 9.9.9 ] && grep -q 'post_update in manifest.sh failed' "$TMP/o" \
          && ok "a failing post_update fails the update, with the new version installed" \
          || no "a failing post_update fails the update, with the new version installed" "$(tail -5 "$TMP/o")"; }
+reset_upd; rm -f "$CLAUDE_DIR/updfail-ran"
+chmod a-w "$U"
+KIT_SKIP_MACHINE_HOOKS=0 PATH="$TMP/upd-stub:$PATH" "$U/update.sh" --yes >"$TMP/o" 2>&1; rc=$?
+chmod u+w "$U"
+[ "$rc" -ne 0 ] && [ "$(cat "$CLAUDE_DIR/updfail-ran" 2>/dev/null)" = "reinstall|unpacking v9.9.9 failed" ] \
+  && [ ! -e "$CLAUDE_DIR/postup-ran" ] && grep -q 'Unpacking v9.9.9 into' "$TMP/o" \
+  && ok "a failed unpack calls install_failed and stops the update" \
+  || no "a failed unpack calls install_failed and stops the update" "rc=$rc $(cat "$CLAUDE_DIR/updfail-ran" 2>&1) $(tail -4 "$TMP/o")"
+rm -f "$CLAUDE_DIR/updfail-ran"
 reset_upd
 PATH="$TMP/upd-stub:$PATH" "$U/update.sh" --yes >"$TMP/o" 2>&1
 [ ! -e "$CLAUDE_DIR/preup-ran" ] && [ ! -e "$CLAUDE_DIR/postup-ran" ] \
@@ -633,7 +643,7 @@ PATH="$TMP/upd-stub:$PATH" "$U/update.sh" --yes >"$TMP/o" 2>&1
   && ok "KIT_SKIP_MACHINE_HOOKS=1 skips both and says so" \
   || no "KIT_SKIP_MACHINE_HOOKS=1 skips both and says so" "$(tail -8 "$TMP/o")"
 "$U/uninstall.sh" --yes >/dev/null 2>&1
-rm -f "$CLAUDE_DIR"/{preup,postup}-ran; unset UPD_REPO
+rm -f "$CLAUDE_DIR"/{preup,postup,updfail}-ran; unset UPD_REPO
 
 echo "update notice on SessionStart"
 # install.sh registers lib/update-check.sh session-start for a package with

@@ -137,7 +137,9 @@ All optional. The installers check for each with `declare -F`.
   that will not parse, or any other error. Gets `$1`, the mode, and `$2`, the
   reason. For putting back what `pre_install` stopped, so a failed update does
   not leave services down. Not called for a stop before `pre_install`, when
-  nothing has changed, nor on `--dry-run`. Skipped when
+  nothing has changed, nor on `--dry-run`. `update.sh` calls it too, from the
+  new release's `manifest.sh`, with `reinstall` and `unpacking vX.Y.Z failed`,
+  when unpacking fails after `pre_update` and `install.sh` never runs. Skipped when
   `KIT_SKIP_MACHINE_HOOKS=1` is set. Its own failure is reported; the install
   still exits with its original status.
 - **`pre_update`** — runs in `update.sh` after the new release is downloaded,
