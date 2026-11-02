@@ -121,8 +121,10 @@ All optional. The installers check for each with `declare -F`.
 - **`pre_uninstall`** — runs in `uninstall.sh` before anything is removed,
   while the package's files are still installed. For what only the package can
   undo: stopping services it started, unlinking units that point into its
-  directory. Non-zero stops the uninstall with nothing removed. It runs under
-  `--keep-state` and `--keep-settings` too.
+  directory. Non-zero stops the uninstall with nothing removed. Skipped when
+  `KIT_SKIP_MACHINE_HOOKS=1` is set, so the tests' uninstalls never stop the
+  real machine's services. It runs under `--keep-state` and `--keep-settings`
+  too.
 - **`post_uninstall`** — runs in `uninstall.sh` once the files, state and
   settings entries are removed. For undoing a `post_install` change that needs
   none of the package's files, such as `loginctl disable-linger`, only once the

@@ -51,7 +51,8 @@ verify_probe() {
 
 # Optional. Runs in uninstall.sh before anything is removed, while the files
 # are still installed: stop services started from the package's directory.
-# Non-zero stops the uninstall with nothing removed.
+# Non-zero stops the uninstall with nothing removed. Skipped when
+# KIT_SKIP_MACHINE_HOOKS=1 (the tests set it).
 # pre_uninstall() {
 #   systemctl --user stop "$PKG.service" 2>/dev/null || true
 # }

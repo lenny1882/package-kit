@@ -507,16 +507,23 @@ cat >> "$H/manifest.sh" <<'EOF'
 pre_uninstall() { [ -e "$CLAUDE_DIR/hooks/test-hook.sh" ] && echo present > "$CLAUDE_DIR/pre-ran"; return "${PRE_RC:-0}"; }
 EOF
 "$H/install.sh" --yes >/dev/null 2>&1
-PRE_RC=3 "$H/uninstall.sh" --yes >/dev/null 2>&1 \
+KIT_SKIP_MACHINE_HOOKS=0 PRE_RC=3 "$H/uninstall.sh" --yes >/dev/null 2>&1 \
   && no "a failing pre_uninstall stops the uninstall" "exited 0" \
   || { [ -e "$CLAUDE_DIR/hooks/test-hook.sh" ] \
          && ok "a failing pre_uninstall stops the uninstall" \
          || no "a failing pre_uninstall stops the uninstall" "files removed anyway"; }
 rm -f "$CLAUDE_DIR/pre-ran"
-"$H/uninstall.sh" --yes >/dev/null 2>&1
+KIT_SKIP_MACHINE_HOOKS=0 "$H/uninstall.sh" --yes >/dev/null 2>&1
 [ "$(cat "$CLAUDE_DIR/pre-ran" 2>/dev/null)" = present ] && [ ! -e "$CLAUDE_DIR/hooks/test-hook.sh" ] \
   && ok "pre_uninstall runs while the package is still installed" \
   || no "pre_uninstall runs while the package is still installed" "$(cat "$CLAUDE_DIR/pre-ran" 2>&1)"
+rm -f "$CLAUDE_DIR/pre-ran"
+"$H/install.sh" --yes >/dev/null 2>&1
+"$H/uninstall.sh" --yes >"$TMP/o" 2>&1
+[ ! -e "$CLAUDE_DIR/pre-ran" ] && [ ! -e "$CLAUDE_DIR/hooks/test-hook.sh" ] \
+  && grep -q 'pre_uninstall skipped (KIT_SKIP_MACHINE_HOOKS=1)' "$TMP/o" \
+  && ok "KIT_SKIP_MACHINE_HOOKS=1 skips pre_uninstall, says so, and still uninstalls" \
+  || no "KIT_SKIP_MACHINE_HOOKS=1 skips pre_uninstall, says so, and still uninstalls" "$(tail -5 "$TMP/o")"
 rm -f "$CLAUDE_DIR/pre-ran"
 cp "$TMP/manifest.orig" "$H/manifest.sh"
 

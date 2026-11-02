@@ -58,10 +58,12 @@ printf '%s\n' "== Uninstalling $PKG"
 
 # pre_uninstall runs while the package is still installed, for anything that
 # needs its files to undo — services started from inside the skill's directory,
-# say. If it fails, nothing is removed.
+# say. If it fails, nothing is removed. Test harnesses set
+# KIT_SKIP_MACHINE_HOOKS=1, because stopping services changes the real machine.
 if declare -F pre_uninstall >/dev/null; then
   step "Before removing anything"
-  if pre_uninstall; then ok "pre_uninstall"
+  if [ "${KIT_SKIP_MACHINE_HOOKS:-0}" = 1 ]; then ok "pre_uninstall skipped (KIT_SKIP_MACHINE_HOOKS=1)"
+  elif pre_uninstall; then ok "pre_uninstall"
   else echo "pre_uninstall failed — nothing removed." >&2; exit 1; fi
 fi
 
