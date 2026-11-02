@@ -118,6 +118,29 @@ All optional. The installers check for each with `declare -F`.
   when `KIT_SKIP_MACHINE_HOOKS=1` is set, and says so. `test/run-tests.sh` and
   `test/installer-tests.sh` export it, because their installs go into a
   throwaway `HOME` and these hooks would change the real machine.
+- **`install_failed`** — runs when `install.sh` stops after `pre_install`:
+  a failing `post_install` or `verify_probe`, a missing file, `settings.json`
+  that will not parse, or any other error. Gets `$1`, the mode, and `$2`, the
+  reason. For putting back what `pre_install` stopped, so a failed update does
+  not leave services down. Not called for a stop before `pre_install`, when
+  nothing has changed, nor on `--dry-run`. Skipped when
+  `KIT_SKIP_MACHINE_HOOKS=1` is set. Its own failure is reported; the install
+  still exits with its original status.
+- **`pre_update`** — runs in `update.sh` after the new release is downloaded,
+  before it is unpacked over the package directory. Gets `$1`, the installed
+  version, and `$2`, the new one. It comes from the *new* release's
+  `manifest.sh`, since that one can know every version before it. For what has
+  to happen before the checkout's files change — on a `--link` install, the
+  installed directory is the checkout, so `pre_install` runs too late. Non-zero
+  stops the update with nothing changed.
+- **`post_update`** — runs in `update.sh` after `install.sh` has succeeded,
+  with the same two versions. For migrations from a known older version:
+  renaming a unit, converting `state/`. Not called when `install.sh` fails, nor
+  when `install.sh` is re-run by hand. Non-zero is reported as a failed update;
+  the new version stays installed.
+
+  Both update hooks are skipped with `--dry-run` and when
+  `KIT_SKIP_MACHINE_HOOKS=1` is set, and say so.
 - **`pre_uninstall`** — runs in `uninstall.sh` before anything is removed,
   while the package's files are still installed. For what only the package can
   undo: stopping services it started, unlinking units that point into its

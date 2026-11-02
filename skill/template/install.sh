@@ -71,6 +71,29 @@ for entry in ${FILES[@]+"${FILES[@]}"} ${DIRS[@]+"${DIRS[@]}"}; do
   if [ -e "${entry#*:}" ] || [ -L "${entry#*:}" ]; then MODE=reinstall; break; fi
 done
 
+# install_failed runs when the install stops after pre_install — a failing
+# post_install or verify_probe, a missing file, settings.json that will not
+# parse, or any other error. It gets MODE and the reason, so a package can
+# restart the services pre_install stopped instead of leaving them down.
+# Nothing has changed before this point, so an earlier stop does not call it.
+REASON=""; ARMED=0
+on_exit() {
+  local rc=$1
+  trap - EXIT
+  if [ "$rc" -ne 0 ] && [ "$ARMED" -eq 1 ] && declare -F install_failed >/dev/null; then
+    step "After a failed install"
+    if [ "${KIT_SKIP_MACHINE_HOOKS:-0}" = 1 ]; then
+      ok "install_failed skipped (KIT_SKIP_MACHINE_HOOKS=1)"
+    elif install_failed "$MODE" "${REASON:-install.sh exited with status $rc}"; then
+      ok "install_failed"
+    else
+      warn "install_failed in manifest.sh failed too"
+    fi
+  fi
+  exit "$rc"
+}
+trap 'on_exit $?' EXIT
+
 if [ "$DRY" -eq 1 ]; then
   for h in pre_install post_install; do
     declare -F "$h" >/dev/null && ok "$h skipped (dry run)"
@@ -85,6 +108,7 @@ elif declare -F pre_install >/dev/null; then
     say "  pre_install in manifest.sh failed — nothing installed."; exit 1
   fi
 fi
+[ "$DRY" -eq 1 ] || ARMED=1
 
 # A skill keeps its state in state/ inside its installed directory. The rm -rf
 # below would delete it on every install and upgrade, so it is set aside first
@@ -126,7 +150,9 @@ if declare -F settings_merge >/dev/null; then
   step "Merging into $SETTINGS"
   mkdir -p "$(dirname "$SETTINGS")"
   [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
-  jq empty "$SETTINGS" 2>/dev/null || { say "  $SETTINGS is not valid JSON — fix it and re-run."; exit 1; }
+  jq empty "$SETTINGS" 2>/dev/null || {
+    say "  $SETTINGS is not valid JSON — fix it and re-run."
+    REASON="settings.json is not valid JSON"; exit 1; }
 
   # Remove this package's previous entries across every event, then let the
   # manifest add the current ones. That is what makes re-running safe.
@@ -189,16 +215,18 @@ if declare -F post_install >/dev/null; then
     ok "post_install"
   else
     warn "post_install in manifest.sh failed — the files are installed, but the step after them is not done"; fail=1
+    REASON="post_install failed"
   fi
 fi
 
 step "Verifying"
 for entry in ${FILES[@]+"${FILES[@]}"} ${DIRS[@]+"${DIRS[@]}"}; do
-  [ -e "${entry#*:}" ] && ok "${entry#*:}" || { warn "missing ${entry#*:}"; fail=1; }
+  [ -e "${entry#*:}" ] && ok "${entry#*:}" || { warn "missing ${entry#*:}"; fail=1; REASON="${REASON:-missing ${entry#*:}}"; }
 done
 if declare -F verify_probe >/dev/null; then
   if verify_probe; then ok "it does what it is supposed to"
-  else warn "the probe in manifest.sh failed — it installed, but does not work"; fail=1; fi
+  else warn "the probe in manifest.sh failed — it installed, but does not work"; fail=1
+       REASON="${REASON:-verify_probe failed}"; fi
 fi
 
 say

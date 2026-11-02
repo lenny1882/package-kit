@@ -456,6 +456,7 @@ post_install() {
   { [ -e "$CLAUDE_DIR/hooks/test-hook.sh" ] && echo "present $1" || echo "absent $1"; } > "$CLAUDE_DIR/post-ran"
   return "${POST_RC:-0}"
 }
+install_failed() { echo "$1|$2" > "$CLAUDE_DIR/failed-ran"; }
 EOF
 "$H/uninstall.sh" --yes >/dev/null 2>&1
 rm -f "$CLAUDE_DIR"/{pre,post}-ran
@@ -463,8 +464,9 @@ KIT_SKIP_MACHINE_HOOKS=0 PRE_RC=3 "$H/install.sh" --yes >"$TMP/o" 2>&1 \
   && no "a failing pre_install stops the install" "exited 0" \
   || { [ ! -e "$CLAUDE_DIR/hooks/test-hook.sh" ] && [ ! -e "$CLAUDE_DIR/post-ran" ] \
          && grep -q 'pre_install in manifest.sh failed — nothing installed' "$TMP/o" \
-         && ok "a failing pre_install stops the install with nothing placed" \
-         || no "a failing pre_install stops the install with nothing placed" "$(tail -5 "$TMP/o")"; }
+         && [ ! -e "$CLAUDE_DIR/failed-ran" ] \
+         && ok "a failing pre_install stops the install with nothing placed, and no install_failed" \
+         || no "a failing pre_install stops the install with nothing placed, and no install_failed" "$(tail -5 "$TMP/o")"; }
 rm -f "$CLAUDE_DIR"/{pre,post}-ran
 KIT_SKIP_MACHINE_HOOKS=0 "$H/install.sh" --yes >"$TMP/o" 2>&1
 [ "$(cat "$CLAUDE_DIR/pre-ran" 2>/dev/null)" = "absent install" ] && grep -q 'ok    pre_install$' "$TMP/o" \
@@ -491,12 +493,29 @@ KIT_SKIP_MACHINE_HOOKS=0 "$H/install.sh" --dry-run >"$TMP/o" 2>&1
   && grep -q 'pre_install skipped (dry run)' "$TMP/o" && grep -q 'post_install skipped (dry run)' "$TMP/o" \
   && ok "--dry-run runs neither and says so" \
   || no "--dry-run runs neither and says so" "$(tail -8 "$TMP/o")"
+[ ! -e "$CLAUDE_DIR/failed-ran" ] \
+  && ok "install_failed does not run when the install succeeds" \
+  || no "install_failed does not run when the install succeeds" "$(cat "$CLAUDE_DIR/failed-ran")"
 KIT_SKIP_MACHINE_HOOKS=0 POST_RC=3 "$H/install.sh" --yes >"$TMP/o" 2>&1 \
   && no "a failing post_install fails the install" "exited 0" \
   || { grep -q 'post_install in manifest.sh failed' "$TMP/o" \
          && ok "a failing post_install fails the install" \
          || no "a failing post_install fails the install" "$(tail -5 "$TMP/o")"; }
-rm -f "$CLAUDE_DIR"/{pre,post}-ran
+[ "$(cat "$CLAUDE_DIR/failed-ran" 2>/dev/null)" = "reinstall|post_install failed" ] \
+  && ok "install_failed then runs, with the mode and the reason" \
+  || no "install_failed then runs, with the mode and the reason" "$(cat "$CLAUDE_DIR/failed-ran" 2>&1)"
+rm -f "$CLAUDE_DIR/failed-ran"
+cp "$CLAUDE_DIR/settings.json" "$TMP/settings.keep"; echo '{not json' > "$CLAUDE_DIR/settings.json"
+KIT_SKIP_MACHINE_HOOKS=0 "$H/install.sh" --yes >"$TMP/o" 2>&1
+[ "$(cat "$CLAUDE_DIR/failed-ran" 2>/dev/null)" = "reinstall|settings.json is not valid JSON" ] \
+  && ok "install_failed runs when settings.json will not parse" \
+  || no "install_failed runs when settings.json will not parse" "$(cat "$CLAUDE_DIR/failed-ran" 2>&1)"
+cp "$TMP/settings.keep" "$CLAUDE_DIR/settings.json"; rm -f "$CLAUDE_DIR/failed-ran"
+POST_RC=3 KIT_SKIP_MACHINE_HOOKS=1 "$H/install.sh" --yes >"$TMP/o" 2>&1
+[ ! -e "$CLAUDE_DIR/failed-ran" ] \
+  && ok "KIT_SKIP_MACHINE_HOOKS=1 skips install_failed" \
+  || no "KIT_SKIP_MACHINE_HOOKS=1 skips install_failed" "$(tail -5 "$TMP/o")"
+rm -f "$CLAUDE_DIR"/{pre,post,failed}-ran
 "$H/uninstall.sh" --yes >/dev/null 2>&1
 cp "$TMP/manifest.orig" "$H/manifest.sh"
 
@@ -526,6 +545,60 @@ rm -f "$CLAUDE_DIR/pre-ran"
   || no "KIT_SKIP_MACHINE_HOOKS=1 skips pre_uninstall, says so, and still uninstalls" "$(tail -5 "$TMP/o")"
 rm -f "$CLAUDE_DIR/pre-ran"
 cp "$TMP/manifest.orig" "$H/manifest.sh"
+
+echo "pre_update and post_update"
+# A stub curl serves a v9.9.9 tarball whose manifest.sh defines both hooks;
+# the installed copy's manifest.sh defines neither, so they must come from the
+# new release. pre_update runs before the files are replaced, post_update after
+# install.sh; both get the old and new versions.
+U="$TMP/upd/test-hook"; mkdir -p "$TMP/upd"; cp -r "$H" "$U"; echo 0.1.0 > "$U/VERSION"
+cp -r "$U" "$TMP/upd-new"; echo 9.9.9 > "$TMP/upd-new/VERSION"
+cat >> "$TMP/upd-new/manifest.sh" <<'EOF'
+pre_update()  { echo "$1 $2 $(cat "$UPD_REPO/VERSION")" > "$CLAUDE_DIR/preup-ran";  return "${PREUP_RC:-0}"; }
+post_update() { echo "$1 $2 $(cat "$UPD_REPO/VERSION")" > "$CLAUDE_DIR/postup-ran"; return "${POSTUP_RC:-0}"; }
+EOF
+mkdir -p "$TMP/upd-tar/test-hook"; cp -r "$TMP/upd-new/." "$TMP/upd-tar/test-hook/"
+tar -czf "$TMP/upd-hook.tar.gz" -C "$TMP/upd-tar" test-hook
+mkdir -p "$TMP/upd-stub"
+cat > "$TMP/upd-stub/curl" <<EOF
+#!/bin/sh
+for a; do [ "\$prev" = -o ] && { cp "$TMP/upd-hook.tar.gz" "\$a"; exit 0; }; prev=\$a; done
+printf '%s\n200' '{"tag_name":"v9.9.9","html_url":"https://example.invalid/r"}'
+EOF
+chmod +x "$TMP/upd-stub/curl"
+export UPD_REPO="$U"
+reset_upd() { rm -rf "$U"; cp -r "$H" "$U"; echo 0.1.0 > "$U/VERSION"; rm -f "$CLAUDE_DIR"/{preup,postup}-ran; }
+
+reset_upd
+KIT_SKIP_MACHINE_HOOKS=0 PREUP_RC=3 PATH="$TMP/upd-stub:$PATH" "$U/update.sh" --yes >"$TMP/o" 2>&1 \
+  && no "a failing pre_update stops the update with nothing changed" "exited 0" \
+  || { [ "$(cat "$U/VERSION")" = 0.1.0 ] && [ ! -e "$CLAUDE_DIR/postup-ran" ] \
+         && grep -q 'pre_update in the new release' "$TMP/o" \
+         && ok "a failing pre_update stops the update with nothing changed" \
+         || no "a failing pre_update stops the update with nothing changed" "$(tail -5 "$TMP/o")"; }
+reset_upd
+KIT_SKIP_MACHINE_HOOKS=0 PATH="$TMP/upd-stub:$PATH" "$U/update.sh" --yes >"$TMP/o" 2>&1
+[ "$(cat "$CLAUDE_DIR/preup-ran" 2>/dev/null)" = "0.1.0 9.9.9 0.1.0" ] \
+  && ok "pre_update comes from the new release and runs before the files change" \
+  || no "pre_update comes from the new release and runs before the files change" "$(cat "$CLAUDE_DIR/preup-ran" 2>&1; tail -5 "$TMP/o")"
+[ "$(cat "$CLAUDE_DIR/postup-ran" 2>/dev/null)" = "0.1.0 9.9.9 9.9.9" ] \
+  && ok "post_update runs after the install, with both versions" \
+  || no "post_update runs after the install, with both versions" "$(cat "$CLAUDE_DIR/postup-ran" 2>&1; tail -5 "$TMP/o")"
+reset_upd
+KIT_SKIP_MACHINE_HOOKS=0 POSTUP_RC=3 PATH="$TMP/upd-stub:$PATH" "$U/update.sh" --yes >"$TMP/o" 2>&1 \
+  && no "a failing post_update fails the update" "exited 0" \
+  || { [ "$(cat "$U/VERSION")" = 9.9.9 ] && grep -q 'post_update in manifest.sh failed' "$TMP/o" \
+         && ok "a failing post_update fails the update, with the new version installed" \
+         || no "a failing post_update fails the update, with the new version installed" "$(tail -5 "$TMP/o")"; }
+reset_upd
+PATH="$TMP/upd-stub:$PATH" "$U/update.sh" --yes >"$TMP/o" 2>&1
+[ ! -e "$CLAUDE_DIR/preup-ran" ] && [ ! -e "$CLAUDE_DIR/postup-ran" ] \
+  && grep -q 'pre_update skipped (KIT_SKIP_MACHINE_HOOKS=1)' "$TMP/o" \
+  && grep -q 'post_update skipped (KIT_SKIP_MACHINE_HOOKS=1)' "$TMP/o" \
+  && ok "KIT_SKIP_MACHINE_HOOKS=1 skips both and says so" \
+  || no "KIT_SKIP_MACHINE_HOOKS=1 skips both and says so" "$(tail -8 "$TMP/o")"
+"$U/uninstall.sh" --yes >/dev/null 2>&1
+rm -f "$CLAUDE_DIR"/{preup,postup}-ran; unset UPD_REPO
 
 echo "post_uninstall"
 # It runs after everything is removed, is skipped under KIT_SKIP_MACHINE_HOOKS=1,

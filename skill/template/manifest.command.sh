@@ -54,6 +54,26 @@ verify_probe() {
 #   loginctl enable-linger "$USER" && systemctl --user restart "$PKG.service"
 # }
 
+# Optional. Runs when install.sh stops after pre_install has run, with $1 the
+# mode and $2 the reason, so services pre_install stopped are not left down.
+# Skipped when KIT_SKIP_MACHINE_HOOKS=1.
+# install_failed() {
+#   systemctl --user start "$PKG.service" 2>/dev/null || true
+# }
+
+# Optional, both. Run by update.sh with $1 the installed version and $2 the
+# new one, from the new release's manifest.sh. pre_update runs before the new
+# files are unpacked; non-zero stops the update with nothing changed.
+# post_update runs after install.sh succeeds; use it to migrate from an older
+# version. Skipped with --dry-run and when KIT_SKIP_MACHINE_HOOKS=1.
+# pre_update() {
+#   systemctl --user stop "$PKG.service" 2>/dev/null || true
+# }
+# post_update() {
+#   case "$1" in 1.*) mv "$CLAUDE_DIR/$PKG/old.conf" "$CLAUDE_DIR/$PKG/new.conf" 2>/dev/null ;; esac
+#   return 0
+# }
+
 # Optional. Runs in uninstall.sh before anything is removed, while the files
 # are still installed: stop services started from the package's directory.
 # Non-zero stops the uninstall with nothing removed. Skipped when
