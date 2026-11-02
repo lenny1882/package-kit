@@ -141,6 +141,18 @@ All optional. The installers check for each with `declare -F`.
 
   Both update hooks are skipped with `--dry-run` and when
   `KIT_SKIP_MACHINE_HOOKS=1` is set, and say so.
+- **`update_available`** — runs inside `lib/update-check.sh check` once for
+  each newly found release: newer than what is installed, and not what the
+  previous check found. Gets `$1`, the installed version, `$2`, the new one,
+  and `$3`, the release URL. It is loaded from the `manifest.sh` in the
+  recorded package directory. `check` runs in the background, so the hook runs
+  in step with finding the release but not with any session: it can act —
+  write a file, send a desktop notification — but cannot show anything in
+  Claude Code; `notice` and `hook-json` report the release from the state
+  file. Its output goes to `~/.local/state/<name>/update_available.log`, and
+  its failure is logged there without failing the check. Skipped when
+  `KIT_SKIP_MACHINE_HOOKS=1` is set. `update-check.sh clear` makes it fire
+  again for the same release.
 - **`pre_uninstall`** — runs in `uninstall.sh` before anything is removed,
   while the package's files are still installed. For what only the package can
   undo: stopping services it started, unlinking units that point into its

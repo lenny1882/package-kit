@@ -74,6 +74,15 @@ verify_probe() {
 #   return 0
 # }
 
+# Optional. Run by lib/update-check.sh check, in the background, once for each
+# newly found release, with $1 the installed version, $2 the new one and $3 the
+# release URL. It cannot show anything in a session; output goes to
+# ~/.local/state/__PKG__/update_available.log. Skipped when
+# KIT_SKIP_MACHINE_HOOKS=1.
+# update_available() {
+#   notify-send "__PKG__ v$2 is available" "$3" 2>/dev/null || true
+# }
+
 # Optional. Runs in uninstall.sh before anything is removed, while the files
 # are still installed: stop services started from the package's directory.
 # Non-zero stops the uninstall with nothing removed. Skipped when

@@ -19,6 +19,10 @@
 #
 # Needs `curl`.
 #
+# A package's manifest.sh can define update_available, which check runs once
+# for each newly found release, with the installed version, the new one and
+# the release URL. See do_check.
+#
 # Everything a caller displays comes from the *previous* run's state file. That
 # is deliberate: reading a file is instant, whereas waiting on the network is
 # not, so the notice you see is at most a day stale and costs nothing to show.
@@ -83,8 +87,29 @@ do_check() {
     return 0
   fi
 
+  local before; before=$(read_file "$AVAIL")
   printf '%s\n' "$latest" > "$AVAIL"
   printf '%s\n' "$rel_url" > "$URL_F"
+
+  # update_available, from the package's manifest.sh, runs once per newly found
+  # release: when it is newer than what is installed and differs from what the
+  # previous check found. It runs inside this check, which callers run in the
+  # background, so it can act but cannot show anything in a session — that is
+  # what notice and hook-json are for. Its output goes to update_available.log.
+  local have; have=$(read_file "$INSTALLED")
+  if newer_than "$have" "$latest" && [ "$latest" != "$before" ] \
+     && [ -f "$repo/manifest.sh" ] && [ "${KIT_SKIP_MACHINE_HOOKS:-0}" != 1 ]; then
+    (
+      export CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
+      FILES=(); DIRS=(); STATE_DIRS=(); REGISTRATIONS=()
+      # shellcheck disable=SC1091
+      . "$repo/manifest.sh" || exit 0
+      declare -F update_available >/dev/null || exit 0
+      printf '%s  v%s found (installed v%s)\n' "$(date '+%F %T')" "$latest" "$have"
+      if update_available "$have" "$latest" "$rel_url"; then echo "  update_available ok"
+      else echo "  update_available failed (status $?)"; fi
+    ) >> "$STATE/update_available.log" 2>&1
+  fi
 }
 
 checked_today() {

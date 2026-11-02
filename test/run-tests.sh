@@ -109,6 +109,41 @@ PATH="$TMP/stub:$PATH" "$out/lib/update-check.sh" check --force
 "$out/lib/update-check.sh" status >"$TMP/o"
 grep -q 'available: *9.9.9' "$TMP/o" \
   && ok "update-check.sh records it" || no "update-check.sh records it" "$(cat "$TMP/o")"
+echo "update_available"
+# check runs it once per newly found release, from the recorded repo's
+# manifest.sh, with the installed version, the new one and the release URL.
+cp "$out/manifest.sh" "$TMP/manifest.ua"
+cat >> "$out/manifest.sh" <<'EOF'
+update_available() { echo "$1 $2 $3" >> "$UA_OUT"; echo "said something"; return "${UA_RC:-0}"; }
+EOF
+UAL="$TMP/state/test-hook/update_available.log"; export UA_OUT="$TMP/ua-ran"
+rm -f "$UA_OUT"; "$out/lib/update-check.sh" clear
+KIT_SKIP_MACHINE_HOOKS=0 PATH="$TMP/stub:$PATH" "$out/lib/update-check.sh" check --force
+[ "$(cat "$UA_OUT" 2>/dev/null)" = "0.1.0 9.9.9 https://example.invalid/r" ] \
+  && ok "update_available runs when check finds a newer release" \
+  || no "update_available runs when check finds a newer release" "$(cat "$UA_OUT" "$UAL" 2>&1)"
+grep -q 'said something' "$UAL" && grep -q 'update_available ok' "$UAL" \
+  && ok "its output goes to update_available.log" || no "its output goes to update_available.log" "$(cat "$UAL" 2>&1)"
+KIT_SKIP_MACHINE_HOOKS=0 PATH="$TMP/stub:$PATH" "$out/lib/update-check.sh" check --force
+[ "$(wc -l < "$UA_OUT")" -eq 1 ] \
+  && ok "it does not run again for the same release" || no "it does not run again for the same release" "$(cat "$UA_OUT")"
+rm -f "$UA_OUT"; "$out/lib/update-check.sh" clear
+PATH="$TMP/stub:$PATH" "$out/lib/update-check.sh" check --force
+[ ! -e "$UA_OUT" ] \
+  && ok "KIT_SKIP_MACHINE_HOOKS=1 skips it" || no "KIT_SKIP_MACHINE_HOOKS=1 skips it" "ran"
+"$out/lib/update-check.sh" clear
+KIT_SKIP_MACHINE_HOOKS=0 UA_RC=3 PATH="$TMP/stub:$PATH" "$out/lib/update-check.sh" check --force \
+  && grep -q 'update_available failed (status 3)' "$UAL" \
+  && ok "a failing update_available is logged and check still exits 0" \
+  || no "a failing update_available is logged and check still exits 0" "$(tail -3 "$UAL" 2>&1)"
+rm -f "$UA_OUT"; "$out/lib/update-check.sh" clear
+"$out/lib/update-check.sh" record-install 9.9.9 "$out"
+KIT_SKIP_MACHINE_HOOKS=0 PATH="$TMP/stub:$PATH" "$out/lib/update-check.sh" check --force
+[ ! -e "$UA_OUT" ] \
+  && ok "it does not run when the release is what is installed" || no "it does not run when the release is what is installed" "ran"
+"$out/lib/update-check.sh" record-install 0.1.0 "$out"
+rm -f "$UA_OUT"; cp "$TMP/manifest.ua" "$out/manifest.sh"
+
 printf '#!/bin/sh\nprintf %s\n' "'{}\n404'" > "$TMP/stub/curl"
 PATH="$TMP/stub:$PATH" "$out/update.sh" --check >"$TMP/o" 2>&1 \
   && no "update.sh stops when there is no release" "exited 0" \
