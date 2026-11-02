@@ -635,6 +635,51 @@ PATH="$TMP/upd-stub:$PATH" "$U/update.sh" --yes >"$TMP/o" 2>&1
 "$U/uninstall.sh" --yes >/dev/null 2>&1
 rm -f "$CLAUDE_DIR"/{preup,postup}-ran; unset UPD_REPO
 
+echo "update notice on SessionStart"
+# install.sh registers lib/update-check.sh session-start for a package with
+# releases, once however often it runs; uninstall.sh and UPDATE_NOTICE=0 take it
+# out; a package without releases never gets it.
+NC="~/.local/share/test-hook/update-check.sh session-start"
+count_notice() { jq --arg c "$NC" '[.hooks.SessionStart[]?.hooks[]? | select(.command == $c)] | length' "$CLAUDE_DIR/settings.json"; }
+"$H/install.sh" --yes >"$TMP/o" 2>&1
+[ "$(count_notice)" = 1 ] && jq -e '.hooks.SessionStart[] | select(.matcher == "startup")' "$CLAUDE_DIR/settings.json" >/dev/null \
+  && grep -q 'SessionStart: the update notice' "$TMP/o" \
+  && ok "install registers the update notice on SessionStart startup" \
+  || no "install registers the update notice on SessionStart startup" "$(jq -c .hooks "$CLAUDE_DIR/settings.json")"
+"$H/install.sh" --yes >/dev/null 2>&1
+[ "$(count_notice)" = 1 ] && ok "reinstalling leaves one entry" || no "reinstalling leaves one entry" "$(count_notice)"
+# session-start: prints what the last check found, returns at once, and the
+# check it starts in the background runs.
+UCS="$HOME/.local/state/test-hook"; mkdir -p "$TMP/ns-stub"
+printf '#!/bin/sh\nprintf %s\n' "'{\"tag_name\":\"v9.9.9\",\"html_url\":\"https://example.invalid/r\"}\n200'" > "$TMP/ns-stub/curl"
+chmod +x "$TMP/ns-stub/curl"
+echo 9.9.9 > "$UCS/available"; rm -f "$UCS/last-check"
+start=$(date +%s)
+PATH="$TMP/ns-stub:$PATH" timeout 10 "$HOME/.local/share/test-hook/update-check.sh" session-start >"$TMP/o" 2>&1
+took=$(( $(date +%s) - start ))
+jq -e '.systemMessage | test("v9.9.9 is available")' "$TMP/o" >/dev/null && [ "$took" -le 3 ] \
+  && ok "session-start prints the notice and returns at once" \
+  || no "session-start prints the notice and returns at once" "took ${took}s: $(cat "$TMP/o")"
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$UCS/last-check" ] && break; sleep 0.5; done
+[ "$(cat "$UCS/last-check" 2>/dev/null)" = "$(date +%F)" ] \
+  && ok "session-start runs today's check in the background" \
+  || no "session-start runs today's check in the background" "no stamp in $UCS"
+cp "$H/manifest.sh" "$TMP/manifest.nt"; echo 'UPDATE_NOTICE=0' >> "$H/manifest.sh"
+"$H/install.sh" --yes >/dev/null 2>&1
+[ "$(count_notice)" = 0 ] && jq -e '.hooks.PreToolUse' "$CLAUDE_DIR/settings.json" >/dev/null \
+  && ok "UPDATE_NOTICE=0 takes the entry out and leaves the package's own" \
+  || no "UPDATE_NOTICE=0 takes the entry out and leaves the package's own" "$(jq -c .hooks "$CLAUDE_DIR/settings.json")"
+cp "$TMP/manifest.nt" "$H/manifest.sh"
+"$H/install.sh" --yes >/dev/null 2>&1
+"$H/uninstall.sh" --yes >/dev/null 2>&1
+[ "$(count_notice)" = 0 ] && ok "uninstall takes the entry out" || no "uninstall takes the entry out" "$(count_notice)"
+"$NEW" --name nr-skill --kind skill --no-release --dir "$TMP" >/dev/null 2>&1
+"$TMP/nr-skill/install.sh" --yes >"$TMP/o" 2>&1
+! grep -q 'nr-skill/update-check.sh' "$CLAUDE_DIR/settings.json" && ! grep -q 'Merging into' "$TMP/o" \
+  && ok "a package without releases registers nothing" \
+  || no "a package without releases registers nothing" "$(tail -5 "$TMP/o")"
+"$TMP/nr-skill/uninstall.sh" --yes >/dev/null 2>&1
+
 echo "post_uninstall"
 # It runs after everything is removed, is skipped under KIT_SKIP_MACHINE_HOOKS=1,
 # and a failure is reported with a non-zero exit.

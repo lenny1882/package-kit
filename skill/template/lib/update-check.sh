@@ -31,6 +31,8 @@
 #   badge             "<glyph> vX.Y.Z" if an update is waiting, else nothing
 #   notice            two-line plain-text notice, else nothing
 #   hook-json         {"systemMessage": "..."} for a hook to emit, else nothing
+#   session-start     hook-json, then today's check in the background; what
+#                     install.sh registers on SessionStart
 #   status            installed / available / last checked
 #   record-install <version> <repo-dir>    called by install.sh
 #   clear             forget what the last check found
@@ -138,6 +140,14 @@ case "${1:-status}" in
     fi
     ;;
 
+  session-start)
+    # For a SessionStart hook: print the notice the last check left, then start
+    # today's check detached, with every stream closed so the session does not
+    # wait on it.
+    "$0" hook-json
+    ( "$0" check </dev/null >/dev/null 2>&1 & ) </dev/null >/dev/null 2>&1
+    ;;
+
   hook-json)
     if update_pending; then
       msg=$(printf '%s v%s is available (you have v%s). Update: cd %s && ./update.sh' \
@@ -173,7 +183,7 @@ case "${1:-status}" in
     ;;
 
   *)
-    printf 'usage: %s {check [--force]|badge|notice|hook-json|status|clear}\n' \
+    printf 'usage: %s {check [--force]|badge|notice|hook-json|session-start|status|clear}\n' \
       "$(basename "$0")" >&2
     exit 1
     ;;

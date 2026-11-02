@@ -146,7 +146,26 @@ if [ "$DRY" -eq 0 ]; then
   fi
 fi
 
-if declare -F settings_merge >/dev/null; then
+# A package with releases registers a SessionStart entry that shows the
+# release notice the last check found and starts the next check in the
+# background (lib/update-check.sh session-start). UPDATE_NOTICE=0 in
+# manifest.sh leaves it out.
+NOTICE_CMD="~/.local/share/$PKG/update-check.sh session-start"
+NOTICE=0
+[ -f "$REPO/lib/update-check.sh" ] && [ "${UPDATE_NOTICE:-1}" != 0 ] && NOTICE=1
+add_notice() {
+  if [ "$NOTICE" -eq 1 ]; then
+    jq --arg cmd "$NOTICE_CMD" '
+      .hooks //= {}
+      | .hooks.SessionStart = ((.hooks.SessionStart // []) + [
+          { matcher: "startup", hooks: [{ type: "command", command: $cmd }] }
+        ])'
+  else cat; fi
+}
+merge_own() { if declare -F settings_merge >/dev/null; then settings_merge; else cat; fi; }
+
+if declare -F settings_merge >/dev/null || [ "$NOTICE" -eq 1 ] \
+   || { [ -f "$SETTINGS" ] && grep -qF "$NOTICE_CMD" "$SETTINGS"; }; then
   step "Merging into $SETTINGS"
   mkdir -p "$(dirname "$SETTINGS")"
   [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
@@ -172,9 +191,10 @@ if declare -F settings_merge >/dev/null; then
     } | sort -u | jq -R . | jq -s .
   )
   tmp=$(mktemp)
-  jq --argjson owns "$owns_json" '
+  jq --argjson owns "$owns_json" --arg notice "$NOTICE_CMD" '
     def ours: (.command // "") as $c
-      | any($owns[]; gsub("[.]"; "\\.") as $o
+      | $c == $notice
+        or any($owns[]; gsub("[.]"; "\\.") as $o
           | $c | test("(^|[^A-Za-z0-9_-])" + $o + "($|[^A-Za-z0-9_-])"));
     def strip_ours: map(.hooks |= map(select(ours | not))) | map(select((.hooks | length) > 0));
     if (.hooks | type) == "object" then
@@ -182,7 +202,7 @@ if declare -F settings_merge >/dev/null; then
         if (.value | type) == "array" then .value |= strip_ours else . end)
       | .hooks |= with_entries(select((.value | type) != "array" or (.value | length) > 0))
     else . end
-  ' "$SETTINGS" | settings_merge > "$tmp"
+  ' "$SETTINGS" | merge_own | add_notice > "$tmp"
 
   if [ "$DRY" -eq 1 ]; then
     diff <(jq -S . "$SETTINGS") <(jq -S . "$tmp") || true
@@ -193,6 +213,7 @@ if declare -F settings_merge >/dev/null; then
     cp "$SETTINGS" "$SETTINGS.bak-$PKG"
     mv "$tmp" "$SETTINGS"
     for r in ${REGISTRATIONS[@]+"${REGISTRATIONS[@]}"}; do ok "$r"; done
+    if [ "$NOTICE" -eq 1 ]; then ok "SessionStart: the update notice"; fi
     ok "previous settings kept at $SETTINGS.bak-$PKG"
   fi
 elif [ "$DRY" -eq 1 ]; then

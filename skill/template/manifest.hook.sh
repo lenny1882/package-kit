@@ -114,6 +114,10 @@ verify_probe() {
 #   notify-send "__PKG__ v$2 is available" "$3" 2>/dev/null || true
 # }
 
+# install.sh registers lib/update-check.sh on SessionStart, to show a waiting
+# release and run the daily check. Set this to 0 to leave that out.
+# UPDATE_NOTICE=0
+
 # Optional. Runs in uninstall.sh before anything is removed, while the files
 # are still installed: stop services started from the package's directory.
 # Non-zero stops the uninstall with nothing removed. Skipped when

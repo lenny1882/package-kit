@@ -110,9 +110,10 @@ elif confirm "  Remove this package's hook entries?"; then
     } | sort -u | jq -R . | jq -s .
   )
   tmp=$(mktemp)
-  jq --argjson owns "$owns_json" '
+  jq --argjson owns "$owns_json" --arg notice "~/.local/share/$PKG/update-check.sh session-start" '
     def ours: (.command // "") as $c
-      | any($owns[]; gsub("[.]"; "\\.") as $o
+      | $c == $notice
+        or any($owns[]; gsub("[.]"; "\\.") as $o
           | $c | test("(^|[^A-Za-z0-9_-])" + $o + "($|[^A-Za-z0-9_-])"));
     def strip_ours: map(.hooks |= map(select(ours | not))) | map(select((.hooks | length) > 0));
     if (.hooks | type) == "object" then

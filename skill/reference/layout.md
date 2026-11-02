@@ -52,6 +52,20 @@ These are not stylistic. Each one exists because of something that went wrong.
 - **Say what to do next.** `/hooks` forces a settings reload in a running
   session; a newly added hook needs a restart.
 
+## The update notice
+
+A package with releases ships `lib/update-check.sh`, and `install.sh`
+registers it on `SessionStart` (matcher `startup`) as
+`~/.local/share/<name>/update-check.sh session-start`. That prints, as a
+`systemMessage`, the release the last check found, then starts today's check
+detached with every stream closed, so the session never waits on the network.
+The check runs at most once a day, and is what fires `update_available`.
+
+The entry is added after `settings_merge`, removed by exact command on every
+reinstall and by `uninstall.sh`, and left out for a package without releases.
+`UPDATE_NOTICE=0` in `manifest.sh` leaves it out, and the next install removes
+one already registered.
+
 ## Where a package keeps its state
 
 Config, per-item files, logs — anything the package writes while it runs.
@@ -145,8 +159,9 @@ All optional. The installers check for each with `declare -F`.
   each newly found release: newer than what is installed, and not what the
   previous check found. Gets `$1`, the installed version, `$2`, the new one,
   and `$3`, the release URL. It is loaded from the `manifest.sh` in the
-  recorded package directory. `check` runs in the background, so the hook runs
-  in step with finding the release but not with any session: it can act —
+  recorded package directory. `check` runs in the background, started by the
+  update notice's `SessionStart` entry, so the hook runs in step with finding
+  the release but not with any session: it can act —
   write a file, send a desktop notification — but cannot show anything in
   Claude Code; `notice` and `hook-json` report the release from the state
   file. Its output goes to `~/.local/state/<name>/update_available.log`, and
