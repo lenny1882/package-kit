@@ -33,6 +33,15 @@ verify_probe() {
   grep -q '^name:' "$f" && grep -q '^description:' "$f"
 }
 
+# Optional. Run by the release workflow at the tag, in this directory, with $1
+# the version, before the tarball is packed. Each path in BUILD_OUTPUTS is then
+# added to the tarball — for files that are generated, not committed. Non-zero
+# stops the release.
+# BUILD_OUTPUTS=(bin/claude-package-kit)
+# build() {
+#   go build -ldflags "-X main.version=$1" -o bin/claude-package-kit ./cmd/claude-package-kit
+# }
+
 # Optional, both. Changes outside $HOME around a real install. pre_install
 # runs before any file is placed — stop services running from the package's
 # directory, which a reinstall deletes and copies again; non-zero stops the

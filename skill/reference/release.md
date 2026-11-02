@@ -39,6 +39,14 @@ sources it, so a tarball built without it stops on the first line that matters
 with `No such file or directory`, while the git checkout it was tested from
 installs perfectly.
 
+A file that is generated rather than committed — a compiled binary, a bundle —
+cannot be on that line, because `git archive` only sees committed files.
+`build()` in `manifest.sh` makes it: the workflow runs it in the package
+directory at the tag, with the version as `$1`, then copies each path in
+`BUILD_OUTPUTS` into the tarball. A failing `build` stops the release before
+anything is published. The runner is a bare `ubuntu-latest`, so `build`
+installs whatever tools it needs.
+
 A tag with a hyphen — `v1.2.0-rc1` — publishes as a pre-release, so
 `/releases/latest` skips it and nobody on the stable update path is offered it.
 

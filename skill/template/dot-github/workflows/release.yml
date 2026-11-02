@@ -47,10 +47,23 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          git archive --format=tar.gz \
+          # The tagged files, plus whatever build() in manifest.sh makes and
+          # BUILD_OUTPUTS lists, for files that are generated, not committed.
+          stage=$(mktemp -d)
+          git archive --format=tar \
             --prefix="__PKG__/" \
-            -o "__PKG__.tar.gz" \
+            -o "$stage/files.tar" \
             "$TAG" -- __PAYLOAD__ manifest.sh install.sh uninstall.sh update.sh VERSION README.md
+          tar -xf "$stage/files.tar" -C "$stage" && rm "$stage/files.tar"
+          export CLAUDE_DIR="$HOME/.claude"
+          if ( . ./manifest.sh && declare -F build >/dev/null ); then
+            ( . ./manifest.sh && build "${TAG#v}" )
+            for o in $( . ./manifest.sh && printf '%s\n' ${BUILD_OUTPUTS[@]+"${BUILD_OUTPUTS[@]}"} ); do
+              mkdir -p "$stage/__PKG__/$(dirname "$o")"
+              cp -r "$o" "$stage/__PKG__/$o"
+            done
+          fi
+          tar -czf "__PKG__.tar.gz" -C "$stage" "__PKG__"
 
       - name: Create GitHub Release
         env:

@@ -369,6 +369,45 @@ done
 wait
 [ "$(listed | grep -c '^racer-')" -eq 3 ] \
   && ok "three packages recorded at once all land" || no "three packages recorded at once all land" "$(listed | tr '\n' ,)"
+
+echo "build in the release workflow"
+# build() in manifest.sh runs at the tag with the version, and what
+# BUILD_OUTPUTS lists goes into the tarball; a failing build stops the release.
+cat >> "$G/packages/mono-hook/manifest.sh" <<'EOF'
+BUILD_OUTPUTS=(gen/built.txt)
+build() { mkdir -p gen && echo "built $1" > gen/built.txt; return "${BUILD_RC:-0}"; }
+EOF
+( cd "$G" && git commit -qam "add build" )
+release mono-hook-v0.4.0 && tar -xzf "$G/mono-hook.tar.gz" -O mono-hook/gen/built.txt > "$TMP/built" 2>/dev/null \
+  && [ "$(cat "$TMP/built")" = "built 0.4.0" ] \
+  && ok "monorepo: build's outputs go into the tarball" \
+  || no "monorepo: build's outputs go into the tarball" "$(cat "$TMP/built" 2>&1; tail -3 "$TMP/o")"
+rm -f "$G/mono-hook.tar.gz"
+BUILD_RC=3 release mono-hook-v0.5.0-rc1; rc=$?
+[ "$rc" -eq 2 ] && [ ! -e "$G/mono-hook.tar.gz" ] \
+  && ok "monorepo: a failing build stops the release" || no "monorepo: a failing build stops the release" "rc=$rc"
+# The same for a package with a repo of its own.
+WF="$TMP/test-hook/.github/workflows/release.yml"
+step_script "Build install tarball" > "$TMP/wf1-build.sh"
+SG="$TMP/wf1-repo"; cp -r "$TMP/test-hook" "$SG"
+cat >> "$SG/manifest.sh" <<'EOF'
+BUILD_OUTPUTS=(gen/built.txt)
+build() { mkdir -p gen && echo "built $1" > gen/built.txt; return "${BUILD_RC:-0}"; }
+EOF
+( cd "$SG" && git init -q && git add -A && git commit -qm init && git tag v0.4.0 ) \
+  || no "the single-package scratch repo is set up" "git failed"
+( cd "$SG" && TAG=v0.4.0 bash -e "$TMP/wf1-build.sh" ) >"$TMP/o" 2>&1
+tar -tzf "$SG/test-hook.tar.gz" > "$TMP/listing" 2>/dev/null
+[ "$(tar -xzf "$SG/test-hook.tar.gz" -O test-hook/gen/built.txt 2>/dev/null)" = "built 0.4.0" ] \
+  && grep -q '^test-hook/install.sh$' "$TMP/listing" && ! grep -q '^test-hook/test/' "$TMP/listing" \
+  && ok "single package: the tarball has the payload and build's outputs" \
+  || no "single package: the tarball has the payload and build's outputs" "$(tail -3 "$TMP/o"; head -5 "$TMP/listing")"
+rm -f "$SG/test-hook.tar.gz"
+( cd "$SG" && TAG=v0.4.0 BUILD_RC=3 bash -e "$TMP/wf1-build.sh" ) >"$TMP/o" 2>&1 \
+  && no "single package: a failing build stops the release" "exited 0" \
+  || { [ ! -e "$SG/test-hook.tar.gz" ] && ok "single package: a failing build stops the release" \
+       || no "single package: a failing build stops the release" "tarball made anyway"; }
+WF="$M/.github/workflows/release.yml"
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 
 echo "the generated package installs and works"

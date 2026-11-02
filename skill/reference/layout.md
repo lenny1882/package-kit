@@ -115,6 +115,12 @@ All optional. The installers check for each with `declare -F`.
   `install.sh` leaves `settings.json` alone.
 - **`verify_probe`** — the live check at the end of `install.sh`. Non-zero is
   reported as a failed install.
+- **`build`** — runs in the release workflow, not on the user's machine:
+  in the package directory at the tag, with `$1` the version, before the
+  tarball is packed. Each path in `BUILD_OUTPUTS`, relative to the package
+  directory, is then copied into the tarball beside the committed payload.
+  For files that are generated, not committed. Non-zero stops the release
+  before anything is published. `reference/release.md` has the detail.
 - **`pre_install`** — runs in `install.sh` after the prerequisite check,
   before any file is placed. For what has to happen before the package's files
   are replaced: stopping systemd user services that run from its directory,
